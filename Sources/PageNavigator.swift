@@ -58,7 +58,7 @@ private struct PagePreview: View {
     var body: some View {
         GeometryReader { geo in
             ZStack(alignment: .topLeading) {
-                PaperBackground(style: page.paper)
+                PaperBackground(style: page.paper, customHex: page.customPaperHex)
                 if let background = page.backgroundFile, let img = library.photo(named: background) {
                     Image(uiImage: img).resizable().scaledToFill()
                         .frame(width: geo.size.width, height: geo.size.height).clipped()

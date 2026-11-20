@@ -10,73 +10,115 @@ extension Color {
 }
 
 enum AppPalette {
-    static let parchment = Color(hex: 0xF7F1E9)
-    static let midnight = Color(hex: 0x343342)
-    static let rose = Color(hex: 0xB06D84)
-    static let muted = Color(hex: 0x857B85)
+    static let parchment = Color(hex: 0xF6F2EB)
+    static let midnight = Color(hex: 0x302E36)
+    static let rose = Color(hex: 0xA66D79)
+    static let muted = Color(hex: 0x867E7D)
     static let covers = ["Rose", "Sage", "Lavender", "Night", "Cream", "Blue"]
-    static let papers = ["Ivory", "Lines", "Dots", "Grid", "Blush", "Lilac", "Sage", "Dark", "Rose Lines", "Cream Grid", "Daily Plan", "Checklist", "Vintage", "Cornell"]
+    static let papers = ["Ivory", "Lines", "Dots", "Grid", "Blush", "Lilac", "Sage", "Dark", "Rose Lines", "Cream Grid", "Daily Plan", "Checklist", "Vintage", "Cornell", "Peach", "Lemon", "Sea Glass", "Powder Blue", "Ballet Pink", "Dusty Rose", "Ivory Gold", "Bluebell", "Caramel", "Mauve", "Aqua", "Almond"]
     static let stickers: [(String,String)] = [
+        ("CozyKitten", "Котёнок"), ("StrawberryCake", "Торт"),
+        ("MatchaCup", "Матча"), ("Pancakes", "Панкейки"),
+        ("PeonyBouquet", "Пионы"), ("SatinBow", "Атласный бант"),
+        ("GinghamTape", "Лента"), ("PinkPaper", "Бумага"),
+        ("Instax", "Камера"), ("LaceButterfly", "Кружево"),
+        ("MintClip", "Зажим"), ("Daisies", "Ромашки"),
         ("Rosebud", "Роза"), ("Flower", "Цветы"), ("Peony", "Пион"),
         ("Butterfly", "Бабочка"), ("Bow", "Бант"), ("Goldstar", "Звёзды"),
         ("Waxseal", "Печать"), ("Coffee", "Кофе"), ("Tea", "Чай"),
         ("Book", "Книга"), ("Ticket", "Билет"), ("Lace", "Кружево"),
         ("Moon", "Луна"), ("Heart", "Сердце"), ("Leaf", "Листья"),
-        ("Envelope", "Письмо"), ("Washi", "Скотч"), ("Polaroid", "Фото")
+        ("Envelope", "Письмо"), ("Washi", "Скотч"), ("Polaroid", "Фоторамка"),
+        ("LinenTape", "Льняной скотч"), ("SageTape", "Лента шалфей"), ("DriedRose", "Сухоцвет")
     ]
 }
 
+// Atelier-style offline library: tactile covers, spacious editorial layout.
 struct LibraryView: View {
     @EnvironmentObject private var library: NotebookLibrary
     @State private var showingCreator = false
     @State private var search = ""
+    @State private var toDelete: UUID?
+    private let columns = [GridItem(.adaptive(minimum: 180, maximum: 230), spacing: 23)]
     private var filteredNotebooks: [Notebook] {
         library.notebooks.filter { search.isEmpty || $0.title.localizedCaseInsensitiveContains(search) }
     }
-    @State private var toDelete: UUID?
-    private let columns = [GridItem(.adaptive(minimum: 182, maximum: 235), spacing: 27)]
 
     var body: some View {
         NavigationStack {
             ZStack {
                 AppPalette.parchment.ignoresSafeArea()
+                Image("StudioDesk").resizable().scaledToFill().ignoresSafeArea().opacity(0.19).allowsHitTesting(false)
                 ScrollView {
-                    VStack(alignment: .leading, spacing: 27) {
-                        header
-                        HStack {
-                            VStack(alignment: .leading, spacing: 5) {
-                                Text("Моя библиотека").font(.system(size: 26, weight: .semibold, design: .serif))
-                                Text("Личные страницы — только на твоём iPad")
-                                    .font(.system(size: 13)).foregroundStyle(AppPalette.muted)
+                    VStack(alignment: .leading, spacing: 25) {
+                        HStack(alignment: .center) {
+                            HStack(spacing: 11) {
+                                Image(systemName: "book.closed.fill")
+                                    .font(.system(size: 16, weight: .light)).foregroundStyle(AppPalette.rose)
+                                    .frame(width: 36, height: 36)
+                                    .background(Color(hex: 0xEBDFD8), in: RoundedRectangle(cornerRadius: 12))
+                                VStack(alignment: .leading, spacing: 4) {
+                                    Text("ТИХИЕ СТРАНИЦЫ").font(.system(size: 11, weight: .semibold)).tracking(3.6)
+                                    Text("PRIVATE JOURNAL STUDIO").font(.system(size: 8, weight: .medium)).tracking(1.9).foregroundStyle(AppPalette.muted)
+                                }
                             }
                             Spacer()
-                            Button { showingCreator = true } label: {
-                                Label("Новый блокнот", systemImage: "plus")
-                                    .font(.system(size: 14, weight: .semibold))
-                                    .padding(.horizontal, 16).padding(.vertical, 12)
+                            Text("100% OFFLINE")
+                                .font(.system(size: 9, weight: .semibold)).tracking(1.5)
+                                .padding(.horizontal, 13).padding(.vertical, 9)
+                                .background(.white.opacity(0.6), in: Capsule())
+                        }
+                        .foregroundStyle(AppPalette.midnight)
+                        .padding(.bottom, 10)
+                        Rectangle().fill(Color(hex: 0xDCCFC5)).frame(height: 1)
+                        HStack(alignment: .bottom, spacing: 20) {
+                            VStack(alignment: .leading, spacing: 11) {
+                                Text("ТВОЯ ЛИЧНАЯ БИБЛИОТЕКА").font(.system(size: 10, weight: .semibold))
+                                    .tracking(2.5).foregroundStyle(AppPalette.rose)
+                                Text("Красивые мысли\nживут здесь.")
+                                    .font(.system(size: 39, weight: .regular, design: .serif))
+                                    .lineSpacing(0).tracking(-0.8)
+                                    .foregroundStyle(AppPalette.midnight)
+                                    .fixedSize(horizontal: false, vertical: true)
+                                Text("Блокноты, воспоминания, заметки и маленькие истории.")
+                                    .font(.system(size: 13)).foregroundStyle(AppPalette.muted)
                             }
-                            .buttonStyle(.plain)
-                            .foregroundStyle(.white)
-                            .background(AppPalette.midnight, in: Capsule())
-                        }
+                            Spacer(minLength: 0)
+                            Button { showingCreator = true } label: {
+                                HStack(spacing: 10) {
+                                    Image(systemName: "plus").font(.system(size: 12, weight: .semibold))
+                                    Text("Новый блокнот").font(.system(size: 13, weight: .semibold))
+                                }
+                                .padding(.horizontal, 18).padding(.vertical, 15)
+                                .foregroundStyle(.white)
+                                .background(AppPalette.midnight, in: RoundedRectangle(cornerRadius: 14))
+                            }.buttonStyle(.plain)
+                        }.padding(.vertical, 18)
                         HStack(spacing: 10) {
-                            Image(systemName: "magnifyingglass").foregroundStyle(AppPalette.muted)
-                            TextField("Поиск по блокнотам", text: $search)
-                                .font(.system(size: 14))
-                                .autocorrectionDisabled()
+                            Image(systemName: "magnifyingglass").foregroundStyle(AppPalette.rose)
+                            TextField("Найти блокнот...", text: $search)
+                                .font(.system(size: 14)).autocorrectionDisabled()
                         }
-                        .padding(13)
-                        .background(Color.white.opacity(0.82), in: RoundedRectangle(cornerRadius: 14))
-                        LazyVGrid(columns: columns, spacing: 30) {
+                        .padding(.horizontal, 18).padding(.vertical, 15)
+                        .background(.white.opacity(0.78), in: RoundedRectangle(cornerRadius: 15))
+                        .overlay(RoundedRectangle(cornerRadius: 15).stroke(Color(hex: 0xE8DDD3), lineWidth: 1))
+                        HStack(alignment: .firstTextBaseline) {
+                            Text("Мои коллекции").font(.system(size: 22, design: .serif))
+                            Spacer()
+                            Text("\(filteredNotebooks.count) блокн.")
+                                .font(.system(size: 12)).foregroundStyle(AppPalette.muted)
+                        }.foregroundStyle(AppPalette.midnight).padding(.top, 4)
+                        LazyVGrid(columns: columns, spacing: 24) {
                             ForEach(filteredNotebooks) { book in
                                 NavigationLink(value: book.id) {
-                                    VStack(alignment: .leading, spacing: 11) {
+                                    VStack(alignment: .leading, spacing: 10) {
                                         NotebookCover(book: book)
-                                            .aspectRatio(0.78, contentMode: .fit)
-                                        Text(book.title).font(.system(size: 16, weight: .semibold, design: .serif))
-                                            .foregroundStyle(AppPalette.midnight).lineLimit(1)
-                                        Text("\(book.pages.count) стр. · Офлайн")
-                                            .font(.system(size: 12)).foregroundStyle(AppPalette.muted)
+                                            .aspectRatio(0.77, contentMode: .fit)
+                                        Text(book.title)
+                                            .font(.system(size: 15, weight: .medium, design: .serif))
+                                            .lineLimit(1).foregroundStyle(AppPalette.midnight)
+                                        Text("\(book.pages.count) страниц · На устройстве")
+                                            .font(.system(size: 10)).foregroundStyle(AppPalette.muted)
                                     }
                                 }
                                 .buttonStyle(.plain)
@@ -86,29 +128,24 @@ struct LibraryView: View {
                             }
                             Button { showingCreator = true } label: {
                                 ZStack {
-                                    RoundedRectangle(cornerRadius: 17)
-                                        .stroke(AppPalette.rose.opacity(0.42), style: StrokeStyle(lineWidth: 1.4, dash: [8,7]))
-                                    VStack(spacing: 16) {
-                                        Image(systemName: "plus.circle").font(.system(size: 39, weight: .ultraLight))
-                                        Text("Создать новый")
-                                            .font(.system(size: 17, weight: .medium, design: .serif))
-                                    }
-                                    .foregroundStyle(AppPalette.rose)
-                                }
-                                .aspectRatio(0.78, contentMode: .fit)
+                                    RoundedRectangle(cornerRadius: 13)
+                                        .strokeBorder(AppPalette.rose.opacity(0.47), style: StrokeStyle(lineWidth: 1.1, dash: [5, 6]))
+                                    VStack(spacing: 13) {
+                                        Image(systemName: "plus").font(.system(size: 24, weight: .ultraLight))
+                                            .frame(width: 55, height: 55)
+                                            .background(Color.white.opacity(0.55), in: Circle())
+                                        Text("Новая история")
+                                            .font(.system(size: 14, design: .serif))
+                                    }.foregroundStyle(AppPalette.rose)
+                                }.aspectRatio(0.77, contentMode: .fit)
                             }.buttonStyle(.plain)
                         }
-                        HStack(spacing: 6) {
-                            Image(systemName: "lock.shield")
-                            Text("Никаких подписок, рекламы и обязательного интернета. Сохраняется на устройстве.")
-                        }
-                        .font(.system(size: 12))
-                        .foregroundStyle(AppPalette.muted)
-                        .padding(.top, 18)
+                        Text("Сохранено локально · Без рекламы, подписки и обязательного интернета")
+                            .font(.system(size: 11)).foregroundStyle(AppPalette.muted)
+                            .padding(.vertical, 20)
                     }
-                    .padding(.horizontal, 35).padding(.vertical, 24)
-                    .frame(maxWidth: 1080)
-                    .frame(maxWidth: .infinity)
+                    .padding(.horizontal, 40).padding(.vertical, 24)
+                    .frame(maxWidth: 1060).frame(maxWidth: .infinity)
                 }
             }
             .navigationBarHidden(true)
@@ -117,24 +154,7 @@ struct LibraryView: View {
             .alert("Удалить блокнот?", isPresented: Binding(get: { toDelete != nil }, set: { if !$0 { toDelete = nil } })) {
                 Button("Удалить", role: .destructive) { if let id = toDelete { library.deleteNotebook(id) }; toDelete = nil }
                 Button("Отмена", role: .cancel) { toDelete = nil }
-            } message: { Text("Восстановить его без резервной копии не получится.") }
-        }
-    }
-
-    private var header: some View {
-        VStack(alignment: .leading, spacing: 3) {
-            HStack {
-                Image(systemName: "leaf").font(.system(size: 22, weight: .ultraLight))
-                Text("ТИХИЕ СТРАНИЦЫ")
-                    .font(.system(size: 13, weight: .semibold, design: .rounded))
-                    .tracking(3.2)
-                Spacer()
-                Text("OFFLINE JOURNAL")
-                    .font(.system(size: 10, weight: .medium)).tracking(2)
-            }
-            .foregroundStyle(AppPalette.rose)
-            Rectangle().frame(height: 1).foregroundStyle(Color(hex: 0xD9CCC5))
-                .padding(.top, 14)
+            } message: { Text("Без резервной копии вернуть записи не получится.") }
         }
     }
 }
@@ -143,32 +163,32 @@ struct NotebookCover: View {
     let book: Notebook
     var body: some View {
         ZStack {
-            Image("Cover_\(book.cover)")
-                .resizable().scaledToFill().clipped()
-            Rectangle().stroke(Color.white.opacity(0.48), lineWidth: 1)
-                .padding(10)
-            VStack(spacing: 14) {
+            Image("Cover_\(book.cover)").resizable().scaledToFill()
+            VStack(spacing: 12) {
+                Text("THE QUIET PAGES COLLECTION")
+                    .font(.system(size: 7, weight: .medium)).tracking(2.1).opacity(0.70)
                 Spacer()
-                Image(systemName: "sparkle").font(.system(size: 25, weight: .ultraLight))
-                Text(book.title)
-                    .font(.system(size: 25, weight: .regular, design: .serif))
-                    .multilineTextAlignment(.center).lineLimit(3).minimumScaleFactor(0.72)
-                Rectangle().frame(width: 36, height: 1)
-                Text("notes & little memories")
-                    .font(.system(size: 10, weight: .medium, design: .serif)).tracking(1.4)
+                VStack(spacing: 15) {
+                    Rectangle().fill(AppPalette.rose.opacity(0.65)).frame(width: 35, height: 1)
+                    Text(book.title)
+                        .font(.system(size: 25, weight: .regular, design: .serif))
+                        .multilineTextAlignment(.center).lineLimit(3).minimumScaleFactor(0.72)
+                    Text("NOTES  ·  MEMORIES  ·  IDEAS")
+                        .font(.system(size: 7, weight: .medium)).tracking(1.9).opacity(0.72)
+                }
+                .padding(.horizontal, 18).padding(.vertical, 24)
+                .frame(maxWidth: .infinity)
+                .background(Color(hex: book.cover == "Night" ? 0x2E3540 : 0xFFF9F2).opacity(book.cover == "Night" ? 0.62 : 0.78))
                 Spacer()
-                Text("EST. 2026").font(.system(size: 9)).tracking(3)
-                    .padding(.bottom, 16)
+                Text("VOL. 01 / PRIVATE")
+                    .font(.system(size: 8, weight: .medium)).tracking(2.2).opacity(0.7)
             }
-            .padding(20)
+            .padding(.horizontal, 32).padding(.vertical, 35)
             .foregroundStyle(book.cover == "Night" ? Color.white : AppPalette.midnight)
         }
         .clipShape(RoundedRectangle(cornerRadius: 12))
-        .shadow(color: .black.opacity(0.12), radius: 18, x: 5, y: 11)
-        .overlay(alignment: .leading) {
-            RoundedRectangle(cornerRadius: 3).fill(.black.opacity(0.10))
-                .frame(width: 7).padding(.leading, 7)
-        }
+        .overlay(RoundedRectangle(cornerRadius: 12).stroke(Color(hex: 0x75685C).opacity(0.16), lineWidth: 1))
+        .shadow(color: Color(hex: 0x594344).opacity(0.19), radius: 16, x: 5, y: 12)
     }
 }
 

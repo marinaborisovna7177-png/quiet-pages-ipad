@@ -41,7 +41,7 @@ enum PDFNotebookExporter {
         case "Dark": mainColor = UIColor(red: 0.2, green: 0.22, blue: 0.26, alpha: 1)
         default: mainColor = UIColor(red: 1, green: 0.992, blue: 0.97, alpha: 1)
         }
-        mainColor.setFill(); cg.fill(bounds)
+        (page.customPaperHex.map { UIColor(Color(hex: $0)) } ?? mainColor).setFill(); cg.fill(bounds)
         if let background = page.backgroundFile, let image = store.photo(named: background) {
             image.draw(in: bounds)
         }
@@ -101,13 +101,23 @@ enum PDFNotebookExporter {
                     img.draw(in: CGRect(x: -138, y: -138, width: 276, height: 276))
                 }
             case .text:
-                let style = NSMutableParagraphStyle(); style.alignment = .center
+                let textStyle = item.textStyle ?? PageTextStyle()
+                let paragraph = NSMutableParagraphStyle()
+                paragraph.alignment = textStyle.alignment == "left" ? .left : textStyle.alignment == "right" ? .right : .center
+                let fontSize = CGFloat(textStyle.fontSize) * bounds.width / 650
+                let textRect = CGRect(x: -bounds.width * 0.33, y: -105,
+                                      width: bounds.width * 0.66, height: 210)
+                if let background = textStyle.backgroundHex {
+                    UIColor(Color(hex: background)).withAlphaComponent(0.90).setFill()
+                    UIBezierPath(roundedRect: textRect.insetBy(dx: -10, dy: -5), cornerRadius: 10).fill()
+                }
                 let attrs: [NSAttributedString.Key: Any] = [
-                    .font: UIFont(name: "Georgia", size: 26) ?? UIFont.systemFont(ofSize: 26),
-                    .foregroundColor: UIColor(red: 0.2, green: 0.2, blue: 0.27, alpha: 1),
-                    .paragraphStyle: style
+                    .font: UIFont(name: textStyle.fontName, size: fontSize) ?? UIFont.systemFont(ofSize: fontSize),
+                    .foregroundColor: UIColor(Color(hex: textStyle.colorHex)).withAlphaComponent(CGFloat(textStyle.opacity)),
+                    .paragraphStyle: paragraph,
+                    .kern: textStyle.letterSpacing * bounds.width / 650
                 ]
-                (item.value as NSString).draw(in: CGRect(x: -240, y: -60, width: 480, height: 120), withAttributes: attrs)
+                (item.value as NSString).draw(in: textRect, withAttributes: attrs)
             }
             cg.restoreGState()
         }

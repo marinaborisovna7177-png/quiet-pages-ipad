@@ -14,7 +14,19 @@ struct NotebookPage: Identifiable, Codable, Equatable {
     var id: UUID = UUID()
     var paper: String = "Ivory"
     var backgroundFile: String? = nil
+    var customPaperHex: UInt32? = nil
     var items: [PageItem] = []
+}
+
+struct PageTextStyle: Codable, Equatable {
+    // Optional on PageItem, so notebooks saved by older versions still decode.
+    var fontName: String = "Georgia"
+    var fontSize: Double = 32
+    var colorHex: UInt32 = 0x302E36
+    var backgroundHex: UInt32? = nil
+    var alignment: String = "center"
+    var letterSpacing: Double = 0
+    var opacity: Double = 1
 }
 
 struct PageItem: Identifiable, Codable, Equatable {
@@ -26,6 +38,7 @@ struct PageItem: Identifiable, Codable, Equatable {
     var y: Double = 0.5
     var scale: Double = 1.0
     var angle: Double = 0
+    var textStyle: PageTextStyle? = nil
 }
 
 @MainActor
@@ -75,7 +88,10 @@ final class NotebookLibrary: ObservableObject {
     func notebook(_ id: UUID) -> Notebook? { notebooks.first { $0.id == id } }
 
     func setPaper(book: UUID, page: UUID, style: String) {
-        edit(book: book, page: page) { $0.paper = style }
+        edit(book: book, page: page) {
+            $0.paper = style
+            $0.customPaperHex = nil
+        }
     }
 
     func addPage(book id: UUID, after current: UUID? = nil) {
@@ -171,6 +187,22 @@ final class NotebookLibrary: ObservableObject {
 
     func addItem(book: UUID, page: UUID, item: PageItem) {
         edit(book: book, page: page) { $0.items.append(item) }
+    }
+
+    func updateText(book: UUID, page: UUID, item: UUID, value: String, style: PageTextStyle) {
+        edit(book: book, page: page) { p in
+            guard let index = p.items.firstIndex(where: { $0.id == item }),
+                  p.items[index].kind == .text else { return }
+            p.items[index].value = value
+            p.items[index].textStyle = style
+        }
+    }
+
+    func setPaperColor(book: UUID, page: UUID, hex: UInt32) {
+        edit(book: book, page: page) { p in
+            p.paper = "Custom"
+            p.customPaperHex = hex
+        }
     }
 
     func moveItem(book: UUID, page: UUID, item: UUID, x: Double, y: Double) {
