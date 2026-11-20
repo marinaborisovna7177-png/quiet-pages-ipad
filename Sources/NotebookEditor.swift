@@ -1,18 +1,21 @@
 import SwiftUI
 import PencilKit
 import PhotosUI
+import PDFKit
+import UniformTypeIdentifiers
 
 private enum EditorPanel: String, Identifiable {
-    case stickers, paper, text
+    case stickers, paper, text, pages
     var id: String { rawValue }
 }
 
 enum InkChoice: String, CaseIterable, Identifiable {
-    case pen = "Ручка", marker = "Маркер", eraser = "Ластик"
+    case pen = "Ручка", pencil = "Карандаш", marker = "Маркер", eraser = "Ластик"
     var id: String { rawValue }
     var symbol: String {
         switch self {
         case .pen: "pencil.tip"
+        case .pencil: "pencil"
         case .marker: "highlighter"
         case .eraser: "eraser"
         }
@@ -26,6 +29,10 @@ struct NotebookEditor: View {
     @State private var currentPage = 0
     @State private var ink: InkChoice = .pen
     @State private var penColor: Color = AppPalette.midnight
+    @State private var strokeWidth: Double = 3
+    @State private var pickedSticker: PhotosPickerItem?
+    @State private var showingPDFImporter = false
+    @State private var importError: String?
     @State private var panel: EditorPanel?
     @State private var pickedPhoto: PhotosPickerItem?
     @State private var exportItem: SharedDocument?
@@ -59,10 +66,41 @@ struct NotebookEditor: View {
                                     item: PageItem(kind: .text, value: text, y: 0.27))
                     self.panel = nil
                 }
+                case .pages:
+                    PageNavigator(book: book, currentPage: $currentPage, library: library) { pageID in
+                        if let newIndex = library.duplicatePage(book: bookID, page: pageID) {
+                            currentPage = newIndex
+                        }
+                    }
                 }
             }
         }
         .sheet(item: $exportItem) { item in ShareSheet(url: item.url) }
+        .fileImporter(isPresented: $showingPDFImporter, allowedContentTypes: [.pdf]) { result in
+            do {
+                let url = try result.get()
+                let access = url.startAccessingSecurityScopedResource()
+                defer { if access { url.stopAccessingSecurityScopedResource() } }
+                guard let document = PDFDocument(url: url), document.pageCount > 0 else {
+                    importError = "PDF не удалось открыть."
+                    return
+                }
+                var backgrounds: [String] = []
+                for index in 0..<min(document.pageCount, 30) {
+                    guard let pdfPage = document.page(at: index) else { continue }
+                    let preview = pdfPage.thumbnail(of: CGSize(width: 1000, height: 1400), for: .mediaBox)
+                    if let data = preview.jpegData(compressionQuality: 0.85),
+                       let filename = library.savePhoto(data) { backgrounds.append(filename) }
+                }
+                if let firstPage = library.addPDFPages(book: bookID, backgrounds: backgrounds) {
+                    currentPage = firstPage
+                } else { importError = "Не удалось добавить страницы PDF." }
+            } catch { importError = "Не получилось прочитать файл PDF." }
+        }
+        .alert("Не удалось импортировать", isPresented: Binding(
+            get: { importError != nil }, set: { if !$0 { importError = nil } })) {
+            Button("Понятно", role: .cancel) { importError = nil }
+        } message: { Text(importError ?? "") }
         .alert("Удалить страницу?", isPresented: $showDeletePage) {
             Button("Удалить", role: .destructive) {
                 if let book = library.notebook(bookID), let page = safePage(book), book.pages.count > 1 {
@@ -72,6 +110,21 @@ struct NotebookEditor: View {
             }
             Button("Отмена", role: .cancel) { }
         } message: { Text("Рисунки и украшения на этой странице будут удалены.") }
+        .onChange(of: pickedSticker) { _, newItem in
+            guard let newItem else { return }
+            Task {
+                if let data = try? await newItem.loadTransferable(type: Data.self) {
+                    await MainActor.run {
+                        if let path = library.savePhoto(data),
+                           let book = library.notebook(bookID), let page = safePage(book) {
+                            library.addItem(book: bookID, page: page.id,
+                                            item: PageItem(kind: .customSticker, value: path))
+                        }
+                        pickedSticker = nil
+                    }
+                }
+            }
+        }
         .onChange(of: pickedPhoto) { _, newItem in
             guard let newItem else { return }
             Task {
@@ -116,7 +169,7 @@ struct NotebookEditor: View {
                             Spacer(minLength: 0)
                             JournalPageCanvas(page: page, width: width, height: height,
                                               library: library, bookID: bookID,
-                                              ink: ink, penColor: penColor,
+                                              ink: ink, penColor: penColor, strokeWidth: strokeWidth,
                                               pageNumber: currentPage + 1)
                                 .id(page.id)
                                 .shadow(color: Color(hex: 0x5D4750).opacity(0.22), radius: 18, x: 8, y: 17)
@@ -152,6 +205,9 @@ struct NotebookEditor: View {
             }
             Spacer()
             Menu {
+                Button("Все страницы", systemImage: "square.grid.2x2") { panel = .pages }
+                Button("Дублировать страницу", systemImage: "plus.square.on.square") { duplicateCurrentPage() }
+                Button("Импортировать PDF", systemImage: "doc.richtext") { showingPDFImporter = true }
                 Button("Добавить страницу", systemImage: "plus.rectangle.on.rectangle") { addPage() }
                 Button("Удалить страницу", systemImage: "trash", role: .destructive) { showDeletePage = true }
                     .disabled(book.pages.count == 1)
@@ -174,16 +230,26 @@ struct NotebookEditor: View {
                 ForEach(InkChoice.allCases) { t in
                     Button { ink = t } label: { ToolChip(title: t.rawValue, symbol: t.symbol, selected: ink == t) }
                 }
+                HStack(spacing: 6) {
+                    Image(systemName: "scribble.variable").font(.caption).foregroundStyle(AppPalette.muted)
+                    Slider(value: $strokeWidth, in: 1...14, step: 1).frame(width: 90)
+                }
+                .padding(.horizontal, 6)
                 ColorPicker("Цвет", selection: $penColor, supportsOpacity: false)
                     .labelsHidden().frame(width: 38).padding(.trailing, 4)
                 Rectangle().fill(Color(hex: 0xDDD0C9)).frame(width: 1, height: 25)
                 Button { panel = .stickers } label: { ToolChip(title: "Стикеры", symbol: "sparkles", selected: false) }
                 Button { panel = .text } label: { ToolChip(title: "Текст", symbol: "textformat", selected: false) }
+                PhotosPicker(selection: $pickedSticker, matching: .images) {
+                    ToolChip(title: "Мои стикеры", symbol: "sparkle.magnifyingglass", selected: false)
+                }
                 PhotosPicker(selection: $pickedPhoto, matching: .images) {
                     ToolChip(title: "Фото", symbol: "photo", selected: false)
                 }
                 Button { panel = .paper } label: { ToolChip(title: "Бумага", symbol: "square.grid.3x3", selected: false) }
                 Rectangle().fill(Color(hex: 0xDDD0C9)).frame(width: 1, height: 25)
+                Button { panel = .pages } label: { ToolChip(title: "Все страницы", symbol: "square.grid.2x2", selected: false) }
+                Button { showingPDFImporter = true } label: { ToolChip(title: "PDF +", symbol: "doc.badge.plus", selected: false) }
                 Button { addPage() } label: { ToolChip(title: "Страница +", symbol: "plus", selected: false) }
                 Button { exportPDF() } label: { ToolChip(title: "PDF", symbol: "square.and.arrow.up", selected: false) }
             }
@@ -205,6 +271,13 @@ struct NotebookEditor: View {
         guard let book = library.notebook(bookID), let page = safePage(book) else { return }
         library.addPage(book: bookID, after: page.id)
         turnPage(1)
+    }
+
+    private func duplicateCurrentPage() {
+        guard let book = library.notebook(bookID), let page = safePage(book) else { return }
+        if let index = library.duplicatePage(book: bookID, page: page.id) {
+            currentPage = index
+        }
     }
 
     private func exportPDF() {
@@ -239,12 +312,20 @@ struct JournalPageCanvas: View {
     let bookID: UUID
     let ink: InkChoice
     let penColor: Color
+    let strokeWidth: Double
     let pageNumber: Int
 
     var body: some View {
         ZStack(alignment: .topLeading) {
             PaperBackground(style: page.paper)
-            PenCanvas(pageID: page.id, library: library, ink: ink, color: UIColor(penColor))
+            if let background = page.backgroundFile, let image = library.photo(named: background) {
+                Image(uiImage: image)
+                    .resizable().scaledToFill()
+                    .frame(width: width, height: height).clipped()
+                    .allowsHitTesting(false)
+            }
+            PenCanvas(pageID: page.id, library: library, ink: ink,
+                      color: UIColor(penColor), strokeWidth: CGFloat(strokeWidth))
             ForEach(page.items) { item in
                 DraggablePageItem(item: item, pageID: page.id, bookID: bookID,
                                   library: library, width: width, height: height)
@@ -252,16 +333,20 @@ struct JournalPageCanvas: View {
             }
             VStack {
                 HStack {
+                    if page.backgroundFile == nil {
                     Text("dear diary,").font(.system(size: 20, design: .serif)).italic()
                         .foregroundStyle(AppPalette.rose.opacity(0.65))
+                    }
                     Spacer()
+                    if page.backgroundFile == nil {
                     Image(systemName: "sparkle").font(.system(size: 18, weight: .ultraLight))
                         .foregroundStyle(AppPalette.rose.opacity(0.65))
+                    }
                 }
                 Spacer()
                 HStack {
-                    Text("quiet pages · keep this moment")
-                        .font(.system(size: 10, design: .serif)).italic()
+                    if page.backgroundFile == nil { Text("quiet pages · keep this moment")
+                        .font(.system(size: 10, design: .serif)).italic() }
                     Spacer()
                     Text(String(format: "%02d", pageNumber))
                         .font(.system(size: 11, design: .serif))
@@ -285,11 +370,13 @@ struct DraggablePageItem: View {
     let width: CGFloat
     let height: CGFloat
     @State private var drag: CGSize = .zero
+    @State private var pinch: CGFloat = 1
+    @State private var twist: Angle = .zero
 
     var body: some View {
         itemContent
-            .scaleEffect(item.scale)
-            .rotationEffect(.degrees(item.angle))
+            .scaleEffect(item.scale * Double(pinch))
+            .rotationEffect(.degrees(item.angle) + twist)
             .offset(drag)
             .shadow(color: .black.opacity(0.13), radius: 3, y: 2)
             .contentShape(Rectangle())
@@ -303,7 +390,28 @@ struct DraggablePageItem: View {
                         drag = .zero
                     }
             )
+            .simultaneousGesture(
+                MagnificationGesture()
+                    .onChanged { pinch = $0 }
+                    .onEnded { value in
+                        library.resizeItem(book: bookID, page: pageID, item: item.id,
+                                           scale: item.scale * Double(value), angle: item.angle)
+                        pinch = 1
+                    }
+            )
+            .simultaneousGesture(
+                RotationGesture()
+                    .onChanged { twist = $0 }
+                    .onEnded { value in
+                        library.resizeItem(book: bookID, page: pageID, item: item.id,
+                                           scale: item.scale, angle: item.angle + value.degrees)
+                        twist = .zero
+                    }
+            )
             .contextMenu {
+                Button("Копировать украшение", systemImage: "plus.square.on.square") {
+                    library.duplicateItem(book: bookID, page: pageID, item: item.id)
+                }
                 Button("Убрать", systemImage: "trash", role: .destructive) {
                     library.deleteItem(book: bookID, page: pageID, item: item.id)
                 }
@@ -316,6 +424,11 @@ struct DraggablePageItem: View {
         case .sticker:
             Image("Sticker_\(item.value)")
                 .resizable().scaledToFit().frame(width: width * 0.22, height: width * 0.22)
+        case .customSticker:
+            if let image = library.photo(named: item.value) {
+                Image(uiImage: image)
+                    .resizable().scaledToFit().frame(width: width * 0.27, height: width * 0.27)
+            }
         case .photo:
             if let image = library.photo(named: item.value) {
                 Image(uiImage: image)
@@ -339,7 +452,8 @@ struct PaperBackground: View {
     let style: String
     private var paperColor: Color {
         switch style {
-        case "Blush": Color(hex: 0xFFF0F0)
+        case "Blush", "Rose Lines": Color(hex: 0xFFF0F0)
+        case "Cream Grid", "Vintage", "Daily Plan", "Checklist", "Cornell": Color(hex: 0xFFF6E9)
         case "Lilac": Color(hex: 0xF2EFF9)
         case "Sage": Color(hex: 0xF1F4EC)
         case "Dark": Color(hex: 0x2E3441)
@@ -349,16 +463,29 @@ struct PaperBackground: View {
     var body: some View {
         Canvas { context, size in
             context.fill(Path(CGRect(origin: .zero, size: size)), with: .color(paperColor))
-            if style == "Lines" || style == "Grid" {
+            if style == "Lines" || style == "Grid" || style == "Rose Lines" || style == "Cream Grid" || style == "Cornell" {
                 let gap: CGFloat = 27
                 for y in stride(from: 55.0, through: size.height, by: gap) {
                     var p = Path(); p.move(to: CGPoint(x: 20, y: y)); p.addLine(to: CGPoint(x: size.width-20, y: y))
                     context.stroke(p, with: .color(Color(hex: 0xBCC4D1).opacity(0.5)), lineWidth: 0.55)
                 }
-                if style == "Grid" {
+                if style == "Grid" || style == "Cream Grid" {
                     for x in stride(from: 20.0, through: size.width-20, by: gap) {
                         var p = Path(); p.move(to: CGPoint(x: x, y: 20)); p.addLine(to: CGPoint(x: x, y: size.height-20))
                         context.stroke(p, with: .color(Color(hex: 0xBCC4D1).opacity(0.32)), lineWidth: 0.5)
+                    }
+                }
+            } else if style == "Daily Plan" || style == "Checklist" {
+                let ink = Color(hex: 0xC7B3AB).opacity(0.52)
+                for n in 0..<14 {
+                    let y: CGFloat = 125 + CGFloat(n) * 39
+                    var row = Path()
+                    row.move(to: CGPoint(x: 65, y: y))
+                    row.addLine(to: CGPoint(x: size.width - 45, y: y))
+                    context.stroke(row, with: .color(ink), lineWidth: 0.8)
+                    if style == "Checklist" {
+                        let box = Path(roundedRect: CGRect(x: 36, y: y - 14, width: 16, height: 16), cornerRadius: 4)
+                        context.stroke(box, with: .color(ink), lineWidth: 1.2)
                     }
                 }
             } else if style == "Dots" {
@@ -368,6 +495,22 @@ struct PaperBackground: View {
                         context.fill(point, with: .color(Color(hex: 0xB4A5B0).opacity(0.5)))
                     }
                 }
+            }
+            if style == "Cornell" {
+                var column = Path()
+                column.move(to: CGPoint(x: size.width * 0.30, y: 55))
+                column.addLine(to: CGPoint(x: size.width * 0.30, y: size.height - 160))
+                column.move(to: CGPoint(x: 22, y: size.height - 160))
+                column.addLine(to: CGPoint(x: size.width - 22, y: size.height - 160))
+                context.stroke(column, with: .color(Color(hex: 0xBCA6A3).opacity(0.7)), lineWidth: 1)
+            }
+            if style == "Vintage" {
+                let outer = Path(roundedRect: CGRect(x: 24, y: 27, width: size.width - 48,
+                                                     height: size.height - 54), cornerRadius: 7)
+                let inner = Path(roundedRect: CGRect(x: 35, y: 38, width: size.width - 70,
+                                                     height: size.height - 76), cornerRadius: 5)
+                context.stroke(outer, with: .color(Color(hex: 0xBE9C80).opacity(0.45)), lineWidth: 1.5)
+                context.stroke(inner, with: .color(Color(hex: 0xBE9C80).opacity(0.3)), lineWidth: 0.7)
             }
         }
     }

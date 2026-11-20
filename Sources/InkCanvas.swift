@@ -6,6 +6,7 @@ struct PenCanvas: UIViewRepresentable {
     let library: NotebookLibrary
     let ink: InkChoice
     let color: UIColor
+    let strokeWidth: CGFloat
 
     func makeCoordinator() -> Coordinator { Coordinator(self) }
 
@@ -29,9 +30,11 @@ struct PenCanvas: UIViewRepresentable {
     private func configure(_ canvas: PKCanvasView) {
         switch ink {
         case .pen:
-            canvas.tool = PKInkingTool(.pen, color: color, width: 2.8)
+            canvas.tool = PKInkingTool(.pen, color: color, width: strokeWidth)
+        case .pencil:
+            canvas.tool = PKInkingTool(.pencil, color: color, width: strokeWidth)
         case .marker:
-            canvas.tool = PKInkingTool(.marker, color: color.withAlphaComponent(0.50), width: 15)
+            canvas.tool = PKInkingTool(.marker, color: color.withAlphaComponent(0.45), width: max(10, strokeWidth * 4))
         case .eraser:
             canvas.tool = PKEraserTool(.vector)
         }

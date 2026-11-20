@@ -15,7 +15,7 @@ enum AppPalette {
     static let rose = Color(hex: 0xB06D84)
     static let muted = Color(hex: 0x857B85)
     static let covers = ["Rose", "Sage", "Lavender", "Night", "Cream", "Blue"]
-    static let papers = ["Ivory", "Lines", "Dots", "Grid", "Blush", "Lilac", "Sage", "Dark"]
+    static let papers = ["Ivory", "Lines", "Dots", "Grid", "Blush", "Lilac", "Sage", "Dark", "Rose Lines", "Cream Grid", "Daily Plan", "Checklist", "Vintage", "Cornell"]
     static let stickers: [(String,String)] = [
         ("Rosebud", "Роза"), ("Flower", "Цветы"), ("Peony", "Пион"),
         ("Butterfly", "Бабочка"), ("Bow", "Бант"), ("Goldstar", "Звёзды"),
@@ -29,6 +29,10 @@ enum AppPalette {
 struct LibraryView: View {
     @EnvironmentObject private var library: NotebookLibrary
     @State private var showingCreator = false
+    @State private var search = ""
+    private var filteredNotebooks: [Notebook] {
+        library.notebooks.filter { search.isEmpty || $0.title.localizedCaseInsensitiveContains(search) }
+    }
     @State private var toDelete: UUID?
     private let columns = [GridItem(.adaptive(minimum: 182, maximum: 235), spacing: 27)]
 
@@ -55,8 +59,16 @@ struct LibraryView: View {
                             .foregroundStyle(.white)
                             .background(AppPalette.midnight, in: Capsule())
                         }
+                        HStack(spacing: 10) {
+                            Image(systemName: "magnifyingglass").foregroundStyle(AppPalette.muted)
+                            TextField("Поиск по блокнотам", text: $search)
+                                .font(.system(size: 14))
+                                .autocorrectionDisabled()
+                        }
+                        .padding(13)
+                        .background(Color.white.opacity(0.82), in: RoundedRectangle(cornerRadius: 14))
                         LazyVGrid(columns: columns, spacing: 30) {
-                            ForEach(library.notebooks) { book in
+                            ForEach(filteredNotebooks) { book in
                                 NavigationLink(value: book.id) {
                                     VStack(alignment: .leading, spacing: 11) {
                                         NotebookCover(book: book)

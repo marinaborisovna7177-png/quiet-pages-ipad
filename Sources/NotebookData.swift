@@ -13,11 +13,12 @@ struct Notebook: Identifiable, Codable, Equatable {
 struct NotebookPage: Identifiable, Codable, Equatable {
     var id: UUID = UUID()
     var paper: String = "Ivory"
+    var backgroundFile: String? = nil
     var items: [PageItem] = []
 }
 
 struct PageItem: Identifiable, Codable, Equatable {
-    enum Kind: String, Codable { case sticker, text, photo }
+    enum Kind: String, Codable { case sticker, text, photo, customSticker }
     var id: UUID = UUID()
     var kind: Kind
     var value: String
@@ -62,7 +63,8 @@ final class NotebookLibrary: ObservableObject {
         guard let book = notebooks.first(where: { $0.id == id }) else { return }
         for page in book.pages {
             try? manager.removeItem(at: inkURL(page.id))
-            for item in page.items where item.kind == .photo {
+            if let background = page.backgroundFile { try? manager.removeItem(at: directory.appendingPathComponent(background)) }
+            for item in page.items where item.kind == .photo || item.kind == .customSticker {
                 try? manager.removeItem(at: directory.appendingPathComponent(item.value))
             }
         }
@@ -87,10 +89,79 @@ final class NotebookLibrary: ObservableObject {
         save()
     }
 
+    // Copies images and ink into new files so edits/deletion of either page stay independent.
+    func duplicatePage(book id: UUID, page: UUID) -> Int? {
+        guard let b = notebooks.firstIndex(where: { $0.id == id }),
+              let p = notebooks[b].pages.firstIndex(where: { $0.id == page }) else { return nil }
+        var copy = notebooks[b].pages[p]
+        copy.id = UUID()
+        copy.items = copy.items.map { old in
+            var item = old
+            item.id = UUID()
+            if item.kind == .photo || item.kind == .customSticker {
+                item.value = copyLocalFile(named: item.value) ?? item.value
+            }
+            return item
+        }
+        if let background = copy.backgroundFile {
+            copy.backgroundFile = copyLocalFile(named: background)
+        }
+        let strokes = drawing(for: page)
+        notebooks[b].pages.insert(copy, at: p + 1)
+        saveDrawing(strokes, for: copy.id)
+        save()
+        return p + 1
+    }
+
+    func addPDFPages(book id: UUID, backgrounds: [String]) -> Int? {
+        guard let b = notebooks.firstIndex(where: { $0.id == id }), !backgrounds.isEmpty else { return nil }
+        let start = notebooks[b].pages.count
+        notebooks[b].pages.append(contentsOf: backgrounds.map {
+            NotebookPage(paper: "Ivory", backgroundFile: $0)
+        })
+        save()
+        return start
+    }
+
+    func resizeItem(book: UUID, page: UUID, item: UUID, scale: Double, angle: Double) {
+        edit(book: book, page: page) { p in
+            if let i = p.items.firstIndex(where: { $0.id == item }) {
+                p.items[i].scale = min(max(scale, 0.3), 3.5)
+                p.items[i].angle = angle.truncatingRemainder(dividingBy: 360)
+            }
+        }
+    }
+
+    func duplicateItem(book: UUID, page: UUID, item: UUID) {
+        edit(book: book, page: page) { p in
+            guard let old = p.items.first(where: { $0.id == item }) else { return }
+            var copy = old
+            copy.id = UUID()
+            copy.x = min(0.92, old.x + 0.07)
+            copy.y = min(0.93, old.y + 0.06)
+            if old.kind == .photo || old.kind == .customSticker {
+                copy.value = copyLocalFile(named: old.value) ?? old.value
+            }
+            p.items.append(copy)
+        }
+    }
+
+    private func copyLocalFile(named filename: String) -> String? {
+        let original = directory.appendingPathComponent(filename)
+        let copy = UUID().uuidString + "." + original.pathExtension
+        do {
+            try manager.copyItem(at: original, to: directory.appendingPathComponent(copy))
+            return copy
+        } catch { return nil }
+    }
+
     func deletePage(book id: UUID, page: UUID) {
         guard let index = notebooks.firstIndex(where: { $0.id == id }), notebooks[index].pages.count > 1,
               let pageIndex = notebooks[index].pages.firstIndex(where: { $0.id == page }) else { return }
-        for item in notebooks[index].pages[pageIndex].items where item.kind == .photo {
+        if let background = notebooks[index].pages[pageIndex].backgroundFile {
+            try? manager.removeItem(at: directory.appendingPathComponent(background))
+        }
+        for item in notebooks[index].pages[pageIndex].items where item.kind == .photo || item.kind == .customSticker {
             try? manager.removeItem(at: directory.appendingPathComponent(item.value))
         }
         notebooks[index].pages.remove(at: pageIndex)
@@ -113,7 +184,8 @@ final class NotebookLibrary: ObservableObject {
 
     func deleteItem(book: UUID, page: UUID, item: UUID) {
         edit(book: book, page: page) { p in
-            if let element = p.items.first(where: { $0.id == item }), element.kind == .photo {
+            if let element = p.items.first(where: { $0.id == item }),
+               element.kind == .photo || element.kind == .customSticker {
                 try? manager.removeItem(at: directory.appendingPathComponent(element.value))
             }
             p.items.removeAll { $0.id == item }
@@ -121,9 +193,16 @@ final class NotebookLibrary: ObservableObject {
     }
 
     func savePhoto(_ data: Data) -> String? {
-        guard let image = UIImage(data: data),
-              let imageData = image.jpegData(compressionQuality: 0.85) else { return nil }
-        let filename = UUID().uuidString + ".jpg"
+        guard let image = UIImage(data: data) else { return nil }
+        // Keep transparency: imported PNG stickers must not receive a white rectangle.
+        let hasAlpha = image.cgImage.map { cg -> Bool in
+            switch cg.alphaInfo {
+            case .first, .last, .premultipliedFirst, .premultipliedLast: return true
+            default: return false
+            }
+        } ?? false
+        guard let imageData = hasAlpha ? image.pngData() : image.jpegData(compressionQuality: 0.88) else { return nil }
+        let filename = UUID().uuidString + (hasAlpha ? ".png" : ".jpg")
         do { try imageData.write(to: directory.appendingPathComponent(filename), options: .atomic); return filename }
         catch { return nil }
     }

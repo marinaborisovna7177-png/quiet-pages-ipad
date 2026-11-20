@@ -34,20 +34,24 @@ enum PDFNotebookExporter {
         guard let cg = UIGraphicsGetCurrentContext() else { return }
         let mainColor: UIColor
         switch page.paper {
-        case "Blush": mainColor = UIColor(red: 1, green: 0.94, blue: 0.94, alpha: 1)
+        case "Rose Lines", "Blush": mainColor = UIColor(red: 1, green: 0.94, blue: 0.94, alpha: 1)
         case "Lilac": mainColor = UIColor(red: 0.96, green: 0.94, blue: 0.99, alpha: 1)
+        case "Vintage", "Cream Grid", "Daily Plan", "Checklist", "Cornell": mainColor = UIColor(red: 1, green: 0.966, blue: 0.916, alpha: 1)
         case "Sage": mainColor = UIColor(red: 0.95, green: 0.97, blue: 0.93, alpha: 1)
         case "Dark": mainColor = UIColor(red: 0.2, green: 0.22, blue: 0.26, alpha: 1)
         default: mainColor = UIColor(red: 1, green: 0.992, blue: 0.97, alpha: 1)
         }
         mainColor.setFill(); cg.fill(bounds)
-        if page.paper == "Lines" || page.paper == "Grid" {
+        if let background = page.backgroundFile, let image = store.photo(named: background) {
+            image.draw(in: bounds)
+        }
+        if ["Lines", "Grid", "Rose Lines", "Cream Grid", "Cornell"].contains(page.paper) {
             cg.setStrokeColor(UIColor(red: 0.72, green: 0.77, blue: 0.84, alpha: 0.36).cgColor)
             cg.setLineWidth(0.7)
             for y in stride(from: CGFloat(74), through: bounds.height - 40, by: 36) {
                 cg.move(to: CGPoint(x: 28, y: y)); cg.addLine(to: CGPoint(x: bounds.width - 28, y: y))
             }
-            if page.paper == "Grid" {
+            if ["Grid", "Cream Grid"].contains(page.paper) {
                 for x in stride(from: CGFloat(30), through: bounds.width - 28, by: 36) {
                     cg.move(to: CGPoint(x: x, y: 25)); cg.addLine(to: CGPoint(x: x, y: bounds.height - 30))
                 }
@@ -66,7 +70,9 @@ enum PDFNotebookExporter {
             .font: UIFont.italicSystemFont(ofSize: 22),
             .foregroundColor: UIColor(red: 0.64, green: 0.40, blue: 0.51, alpha: 0.7)
         ]
-        ("dear diary," as NSString).draw(at: CGPoint(x: 40, y: 30), withAttributes: headerAttrs)
+        if page.backgroundFile == nil {
+            ("dear diary," as NSString).draw(at: CGPoint(x: 40, y: 30), withAttributes: headerAttrs)
+        }
 
         let drawing = store.drawing(for: page.id)
         if drawing.bounds.isNull == false {
@@ -84,6 +90,10 @@ enum PDFNotebookExporter {
             case .sticker:
                 if let image = UIImage(named: "Sticker_\(item.value)") {
                     image.draw(in: CGRect(x: -91, y: -91, width: 182, height: 182))
+                }
+            case .customSticker:
+                if let image = store.photo(named: item.value) {
+                    image.draw(in: CGRect(x: -105, y: -105, width: 210, height: 210))
                 }
             case .photo:
                 if let img = store.photo(named: item.value) {
@@ -106,6 +116,8 @@ enum PDFNotebookExporter {
             .font: UIFont(name: "Georgia", size: 13) ?? UIFont.systemFont(ofSize: 13),
             .foregroundColor: UIColor(red: 0.58, green: 0.52, blue: 0.55, alpha: 0.8)
         ]
-        ("quiet pages · \(pageNumber)" as NSString).draw(at: CGPoint(x: 40, y: bounds.height - 34), withAttributes: footer)
+        if page.backgroundFile == nil {
+            ("quiet pages · \(pageNumber)" as NSString).draw(at: CGPoint(x: 40, y: bounds.height - 34), withAttributes: footer)
+        }
     }
 }
