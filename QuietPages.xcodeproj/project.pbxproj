@@ -13,6 +13,7 @@
 		737E9FD5EB38D9D9404C4924 /* InkCanvas.swift in Sources */ = {isa = PBXBuildFile; fileRef = E8ECF712AE0CA81D753ED4E8 /* InkCanvas.swift */; };
 		8DF3D5E7AF7A5F20A9893D51 /* Export.swift in Sources */ = {isa = PBXBuildFile; fileRef = A8A240832FB2DE4CB39B5557 /* Export.swift */; };
 		8EFD5743999F168D176AB696 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 46273D9B7E2D6AA197DA74C8 /* Assets.xcassets */; };
+		A19850DA1A93000411BEAA01 /* PageNavigator.swift in Sources */ = {isa = PBXBuildFile; fileRef = A19850DA1A93000411BEAA02 /* PageNavigator.swift */; };
 /* End PBXBuildFile section */
 /* Begin PBXFileReference section */
 		BF44E0DF03D9BE7A474131D8 /* QuietPagesApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = QuietPagesApp.swift; sourceTree = "<group>"; };
@@ -24,6 +25,7 @@
 		A8A240832FB2DE4CB39B5557 /* Export.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Export.swift; sourceTree = "<group>"; };
 		46273D9B7E2D6AA197DA74C8 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
 		BC6414B1B2BAB8C9DC15773F /* QuietPages.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = QuietPages.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		A19850DA1A93000411BEAA02 /* PageNavigator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PageNavigator.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 /* Begin PBXFrameworksBuildPhase section */
 		5DFFFCA186F0FC32D147A428 = {isa = PBXFrameworksBuildPhase; buildActionMask = 2147483647; files = (); runOnlyForDeploymentPostprocessing = 0; };
@@ -36,6 +38,7 @@
 			6FDEE7EC3CA4A20C30EB8CA9 /* NotebookUI.swift */,
 			4F988259231894E3B409F1D8 /* NotebookEditor.swift */,
 			872EE4DC608F4A23FECE1096 /* TextStudio.swift */,
+			A19850DA1A93000411BEAA02 /* PageNavigator.swift */,
 			E8ECF712AE0CA81D753ED4E8 /* InkCanvas.swift */,
 			A8A240832FB2DE4CB39B5557 /* Export.swift */,
 		); path = Sources; sourceTree = "<group>"; };
@@ -81,6 +84,7 @@
 			14804DD147D0DBDC48825133 /* NotebookUI.swift in Sources */,
 			88BAF1036F07C3F7B41BAAD5 /* NotebookEditor.swift in Sources */,
 			5BDC70C9A2F118F5228A0477 /* TextStudio.swift in Sources */,
+			A19850DA1A93000411BEAA01 /* PageNavigator.swift in Sources */,
 			737E9FD5EB38D9D9404C4924 /* InkCanvas.swift in Sources */,
 			8DF3D5E7AF7A5F20A9893D51 /* Export.swift in Sources */,
 		); runOnlyForDeploymentPostprocessing = 0; };
