@@ -11,6 +11,21 @@ jobs:
         uses: actions/checkout@v4
       - name: Выбрать Xcode
         run: xcodebuild -version
+      - name: Проверить состав исходников до компиляции
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -f Sources/PageNavigator.swift
+          test -f Sources/PaperCatalog.swift
+          test -f Sources/CoverCatalog.swift
+          for source in Sources/*.swift; do
+            base=$(basename "$source")
+            if ! grep -Fq "$base in Sources" QuietPages.xcodeproj/project.pbxproj; then
+              echo "::error::Файл $base не добавлен в Xcode target"
+              exit 1
+            fi
+          done
+          echo "Все Swift-файлы включены в Xcode-проект."
       - name: Распаковать 2000 стикеров для офлайн-приложения
         shell: bash
         run: |
