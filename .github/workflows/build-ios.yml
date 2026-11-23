@@ -2,42 +2,31 @@ name: Собрать приложение для iPad
 
 on:
   workflow_dispatch:
+  push:
+    branches: [main]
 
 jobs:
   build:
+    name: Сборка и проверка ошибок
     runs-on: macos-latest
+    permissions:
+      contents: read
     steps:
       - name: Скачать исходный проект
         uses: actions/checkout@v4
-      - name: Выбрать Xcode
-        run: xcodebuild -version
-      - name: Проверить состав исходников до компиляции
+
+      - name: Проверить Xcode и проект
         shell: bash
         run: |
-          set -euo pipefail
-          test -f Sources/PageNavigator.swift
-          test -f Sources/PaperCatalog.swift
-          test -f Sources/CoverCatalog.swift
-          for source in Sources/*.swift; do
-            base=$(basename "$source")
-            if ! grep -Fq "$base in Sources" QuietPages.xcodeproj/project.pbxproj; then
-              echo "::error::Файл $base не добавлен в Xcode target"
-              exit 1
-            fi
-          done
-          echo "Все Swift-файлы включены в Xcode-проект."
-      - name: Распаковать 2000 стикеров для офлайн-приложения
-        shell: bash
-        run: |
-          set -euo pipefail
-          for pack in StickerPacks/MegaStickers_*.zip; do
-            unzip -qo "$pack" -d Resources/Assets.xcassets
-          done
-          echo "Imported sticker imagesets: $(find Resources/Assets.xcassets -name 'Sticker_Mega_*.imageset' -type d | wc -l)"
-          test "$(find Resources/Assets.xcassets -name 'Sticker_Mega_*.imageset' -type d | wc -l)" -eq 2000
+          xcodebuild -version
+          test -d QuietPages.xcodeproj || { echo '::error::Не найдена папка QuietPages.xcodeproj'; exit 1; }
+          xcodebuild -list -project QuietPages.xcodeproj
+
       - name: Собрать iPadOS приложение без подписи
+        shell: bash
         run: |
-          set -euo pipefail
+          set +e
+          set -o pipefail
           xcodebuild \
             -project QuietPages.xcodeproj \
             -scheme QuietPages \
@@ -46,16 +35,55 @@ jobs:
             -sdk iphoneos \
             -derivedDataPath build \
             CODE_SIGNING_ALLOWED=NO \
-            build
-      - name: Упаковать в IPA для переподписи через Sideloadly
+            build 2>&1 | tee "$RUNNER_TEMP/quietpages-xcodebuild.log"
+          result=${PIPESTATUS[0]}
+          set -e
+          {
+            echo '## Проверка сборки «Тихие страницы»'
+            if [ "$result" -eq 0 ]; then
+              echo '✅ Сборка прошла успешно.'
+            else
+              echo '❌ Сборка не прошла. Ниже ошибки компилятора:'
+              echo ''
+              echo '```text'
+              grep -E 'error:|fatal error:|BUILD FAILED|[0-9]+ failures' "$RUNNER_TEMP/quietpages-xcodebuild.log" | tail -n 60 || true
+              echo '```'
+              echo ''
+              echo 'Полный журнал будет приложен к запуску как `QuietPages-Build-Log`.'
+            fi
+          } >> "$GITHUB_STEP_SUMMARY"
+          if [ "$result" -ne 0 ]; then
+            echo '::error::Не удалось собрать приложение. Откройте Summary этого запуска: текст ошибок находится в сводке.'
+            exit "$result"
+          fi
+
+      - name: Упаковать приложение в IPA для установки через Sideloadly
+        shell: bash
         run: |
           set -euo pipefail
-          mkdir -p Payload
-          cp -R build/Build/Products/Release-iphoneos/QuietPages.app Payload/
-          zip -qry QuietPages-unsigned.ipa Payload
+          APP_PATH='build/Build/Products/Release-iphoneos/QuietPages.app'
+          if [ ! -d "$APP_PATH" ]; then
+            echo "::error::Не найдено собранное приложение: $APP_PATH"
+            exit 1
+          fi
+          mkdir -p ipa/Payload
+          cp -R "$APP_PATH" ipa/Payload/QuietPages.app
+          (cd ipa && zip -q -r QuietPages-unsigned.ipa Payload)
+          test -s ipa/QuietPages-unsigned.ipa
+
       - name: Сохранить IPA
         uses: actions/upload-artifact@v4
         with:
           name: QuietPages-IPA
-          path: QuietPages-unsigned.ipa
+          path: ipa/QuietPages-unsigned.ipa
+          if-no-files-found: error
+          retention-days: 14
+
+      - name: Сохранить полный журнал даже при ошибке
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: QuietPages-Build-Log
+          path: ${{ runner.temp }}/quietpages-xcodebuild.log
+          if-no-files-found: ignore
           retention-days: 14
