@@ -43,7 +43,8 @@ struct NotebookEditor: View {
     @State private var penColor: Color = AppPalette.midnight
     @State private var strokeWidth: Double = 3
     @State private var editingTextItem: PageItem?
-    // При письме рисуем ПОВЕРХ наклеек; при расстановке наклейки получают жесты.
+    // ТОЛЬКО явное нажатие «Двигать наклейки» отключает PencilKit.
+    // После вставки стикера, фото или текста редактор возвращается к рисованию.
     @State private var arrangingDecor = false
     @State private var textOnSticker: PageItem?
     @State private var addingText = false
@@ -70,7 +71,7 @@ struct NotebookEditor: View {
             if let book = library.notebook(bookID), let page = safePage(book) {
                 switch panel {
                 case .stickers: StickerPalette { stickerName in
-                    arrangingDecor = true
+                    arrangingDecor = false
                     library.addItem(book: bookID, page: page.id,
                                     item: PageItem(kind: .sticker, value: stickerName, x: 0.5, y: 0.5))
                     self.panel = nil
@@ -109,7 +110,7 @@ struct NotebookEditor: View {
                     }
                     library.addItem(book: bookID, page: page.id, item: item)
                     textOnSticker = nil
-                    arrangingDecor = true
+                    arrangingDecor = false
                 }
             }
         }
@@ -162,7 +163,7 @@ struct NotebookEditor: View {
                     await MainActor.run {
                         if let path = library.savePhoto(data),
                            let book = library.notebook(bookID), let page = safePage(book) {
-                            arrangingDecor = true
+                            arrangingDecor = false
                             library.addItem(book: bookID, page: page.id,
                                             item: PageItem(kind: .customSticker, value: path))
                         }
@@ -178,7 +179,7 @@ struct NotebookEditor: View {
                     await MainActor.run {
                         if let path = library.savePhoto(data),
                            let book = library.notebook(bookID), let page = safePage(book) {
-                            arrangingDecor = true
+                            arrangingDecor = false
                             library.addItem(book: bookID, page: page.id, item: PageItem(kind: .photo, value: path))
                         }
                         pickedPhoto = nil
@@ -266,8 +267,8 @@ struct NotebookEditor: View {
                 .padding(.top, 22).padding(.bottom, 12)
             Button { panel = .pages } label: { StudioSideIcon(icon: "square.grid.2x2", title: "Страницы") }
             Button { panel = .paper } label: { StudioSideIcon(icon: "square.stack", title: "Бумага") }
-            Button { arrangingDecor = true; panel = .stickers } label: { StudioSideIcon(icon: "sparkles.rectangle.stack", title: "Стикеры") }
-            Button { arrangingDecor = true; textOnSticker = nil; addingText = true } label: { StudioSideIcon(icon: "textformat", title: "Шрифты") }
+            Button { arrangingDecor = false; panel = .stickers } label: { StudioSideIcon(icon: "sparkles.rectangle.stack", title: "Стикеры") }
+            Button { arrangingDecor = false; textOnSticker = nil; addingText = true } label: { StudioSideIcon(icon: "textformat", title: "Шрифты") }
             PhotosPicker(selection: $pickedPhoto, matching: .images) {
                 StudioSideIcon(icon: "photo", title: "Фото")
             }
@@ -404,10 +405,10 @@ struct NotebookEditor: View {
                     .background(.white.opacity(0.9), in: RoundedRectangle(cornerRadius: 12))
                 }.buttonStyle(.plain)
                 Rectangle().fill(Color(hex: 0xD8D1CA)).frame(width: 1, height: 23).padding(.horizontal, 4)
-                Button { arrangingDecor = true; textOnSticker = nil; addingText = true } label: {
+                Button { arrangingDecor = false; textOnSticker = nil; addingText = true } label: {
                     ToolChip(title: "Текст и шрифты", symbol: "textformat", selected: false)
                 }.buttonStyle(.plain)
-                Button { arrangingDecor = true; panel = .stickers } label: {
+                Button { arrangingDecor = false; panel = .stickers } label: {
                     ToolChip(title: "Стикеры", symbol: "sparkles", selected: false)
                 }.buttonStyle(.plain)
                 Button { panel = .paper } label: {

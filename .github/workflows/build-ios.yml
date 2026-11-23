@@ -22,6 +22,25 @@ jobs:
           test -d QuietPages.xcodeproj || { echo '::error::Не найдена папка QuietPages.xcodeproj'; exit 1; }
           xcodebuild -list -project QuietPages.xcodeproj
 
+      - name: Подключить все 2000 стикеров к приложению
+        shell: bash
+        run: |
+          set -euo pipefail
+          ASSET_DIR="Resources/Assets.xcassets"
+          test -d "$ASSET_DIR" || { echo '::error::Нет каталога Assets.xcassets'; exit 1; }
+          for pack in StickerPacks/MegaStickers_0{1..4}_of_04.zip; do
+            test -s "$pack" || { echo "::error::Отсутствует архив стикеров: $pack"; exit 1; }
+            unzip -oq "$pack" -d "$ASSET_DIR"
+          done
+          count=$(find "$ASSET_DIR" -maxdepth 1 -type d -name 'Sticker_Mega_*.imageset' | wc -l | tr -d ' ')
+          echo "Найдено $count из 2000 стикеров"
+          if [ "$count" -ne 2000 ]; then
+            echo "::error::Должно быть 2000 наборов изображений, найдено $count"
+            exit 1
+          fi
+          test -s "$ASSET_DIR/Sticker_Mega_0001.imageset/art.png"
+          test -s "$ASSET_DIR/Sticker_Mega_2000.imageset/art.png"
+
       - name: Собрать iPadOS приложение без подписи
         shell: bash
         run: |
