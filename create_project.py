@@ -1,7 +1,7 @@
 from pathlib import Path
 import hashlib
 root=Path(__file__).parent
-sources=['QuietPagesApp.swift','NotebookData.swift','NotebookUI.swift','NotebookEditor.swift','InkCanvas.swift','Export.swift']
+sources=['QuietPagesApp.swift','NotebookData.swift','NotebookUI.swift','NotebookEditor.swift','TextStudio.swift','InkCanvas.swift','Export.swift']
 
 def ident(s):return hashlib.sha1(s.encode()).hexdigest()[:24].upper()
 def objid(prefix,name):return ident(prefix+name)
@@ -75,8 +75,8 @@ add('/* Begin XCBuildConfiguration section */')
 for id_,name,settings in [
  (CONFPDD,'Debug','''ALWAYS_SEARCH_USER_PATHS = NO; CLANG_ENABLE_MODULES = YES; CLANG_ENABLE_OBJC_ARC = YES; CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER = YES; DEBUG_INFORMATION_FORMAT = dwarf; ENABLE_TESTABILITY = YES; GCC_OPTIMIZATION_LEVEL = 0; SDKROOT = iphoneos; SWIFT_ACTIVE_COMPILATION_CONDITIONS = DEBUG; SWIFT_OPTIMIZATION_LEVEL = "-Onone";'''),
  (CONFPRD,'Release','''ALWAYS_SEARCH_USER_PATHS = NO; CLANG_ENABLE_MODULES = YES; CLANG_ENABLE_OBJC_ARC = YES; CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER = YES; DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym"; SDKROOT = iphoneos; SWIFT_COMPILATION_MODE = wholemodule; SWIFT_OPTIMIZATION_LEVEL = "-O";'''),
- (CONFTD,'Debug','''ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon; CODE_SIGN_STYLE = Automatic; CURRENT_PROJECT_VERSION = 1; DEVELOPMENT_ASSET_PATHS = ""; GENERATE_INFOPLIST_FILE = NO; INFOPLIST_FILE = Resources/Info.plist; IPHONEOS_DEPLOYMENT_TARGET = 17.0; MARKETING_VERSION = 1.0; PRODUCT_BUNDLE_IDENTIFIER = com.salipaper.quietpages; PRODUCT_NAME = "$(TARGET_NAME)"; SWIFT_VERSION = 5.0; SUPPORTED_PLATFORMS = "iphoneos iphonesimulator"; TARGETED_DEVICE_FAMILY = 2;'''),
- (CONFTR,'Release','''ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon; CODE_SIGN_STYLE = Automatic; CURRENT_PROJECT_VERSION = 1; DEVELOPMENT_ASSET_PATHS = ""; GENERATE_INFOPLIST_FILE = NO; INFOPLIST_FILE = Resources/Info.plist; IPHONEOS_DEPLOYMENT_TARGET = 17.0; MARKETING_VERSION = 1.0; PRODUCT_BUNDLE_IDENTIFIER = com.salipaper.quietpages; PRODUCT_NAME = "$(TARGET_NAME)"; SWIFT_VERSION = 5.0; SUPPORTED_PLATFORMS = "iphoneos iphonesimulator"; TARGETED_DEVICE_FAMILY = 2;''')]:
+ (CONFTD,'Debug','''ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon; CODE_SIGN_STYLE = Automatic; CURRENT_PROJECT_VERSION = 1; DEVELOPMENT_ASSET_PATHS = ""; GENERATE_INFOPLIST_FILE = NO; INFOPLIST_FILE = Resources/Info.plist; IPHONEOS_DEPLOYMENT_TARGET = 17.0; MARKETING_VERSION = 3.0; PRODUCT_BUNDLE_IDENTIFIER = com.salipaper.quietpages; PRODUCT_NAME = "$(TARGET_NAME)"; SWIFT_VERSION = 5.0; SUPPORTED_PLATFORMS = "iphoneos iphonesimulator"; TARGETED_DEVICE_FAMILY = 2;'''),
+ (CONFTR,'Release','''ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon; CODE_SIGN_STYLE = Automatic; CURRENT_PROJECT_VERSION = 1; DEVELOPMENT_ASSET_PATHS = ""; GENERATE_INFOPLIST_FILE = NO; INFOPLIST_FILE = Resources/Info.plist; IPHONEOS_DEPLOYMENT_TARGET = 17.0; MARKETING_VERSION = 3.0; PRODUCT_BUNDLE_IDENTIFIER = com.salipaper.quietpages; PRODUCT_NAME = "$(TARGET_NAME)"; SWIFT_VERSION = 5.0; SUPPORTED_PLATFORMS = "iphoneos iphonesimulator"; TARGETED_DEVICE_FAMILY = 2;''')]:
  add(f'\t\t{id_} /* {name} */ = {{isa = XCBuildConfiguration; buildSettings = {{ {settings} }}; name = {name}; }};')
 add('/* End XCBuildConfiguration section */')
 add('/* Begin XCConfigurationList section */')

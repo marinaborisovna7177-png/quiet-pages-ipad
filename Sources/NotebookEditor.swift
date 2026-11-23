@@ -10,13 +10,25 @@ private enum EditorPanel: String, Identifiable {
 }
 
 enum InkChoice: String, CaseIterable, Identifiable {
-    case pen = "Ручка", pencil = "Карандаш", marker = "Маркер", eraser = "Ластик"
+    // PencilKit на iPadOS 17 поддерживает все эти настоящие виды чернил.
+    case pen = "Ручка"
+    case fountainPen = "Перо"
+    case monoline = "Линер"
+    case pencil = "Карандаш"
+    case marker = "Фломастер"
+    case watercolor = "Акварель"
+    case crayon = "Мелок"
+    case eraser = "Ластик"
     var id: String { rawValue }
     var symbol: String {
         switch self {
         case .pen: "pencil.tip"
+        case .fountainPen: "pencil.tip.crop.circle"
+        case .monoline: "line.diagonal"
         case .pencil: "pencil"
         case .marker: "highlighter"
+        case .watercolor: "paintbrush.pointed"
+        case .crayon: "paintbrush"
         case .eraser: "eraser"
         }
     }
@@ -31,6 +43,9 @@ struct NotebookEditor: View {
     @State private var penColor: Color = AppPalette.midnight
     @State private var strokeWidth: Double = 3
     @State private var editingTextItem: PageItem?
+    // При письме рисуем ПОВЕРХ наклеек; при расстановке наклейки получают жесты.
+    @State private var arrangingDecor = false
+    @State private var textOnSticker: PageItem?
     @State private var addingText = false
     @State private var pickedSticker: PhotosPickerItem?
     @State private var showingPDFImporter = false
@@ -55,8 +70,9 @@ struct NotebookEditor: View {
             if let book = library.notebook(bookID), let page = safePage(book) {
                 switch panel {
                 case .stickers: StickerPalette { stickerName in
+                    arrangingDecor = true
                     library.addItem(book: bookID, page: page.id,
-                                    item: PageItem(kind: .sticker, value: stickerName))
+                                    item: PageItem(kind: .sticker, value: stickerName, x: 0.5, y: 0.5))
                     self.panel = nil
                 }
                 case .paper:
@@ -80,10 +96,20 @@ struct NotebookEditor: View {
         }
         .sheet(isPresented: $addingText) {
             if let book = library.notebook(bookID), let page = safePage(book) {
-                TextStudioSheet(existing: nil) { value, style in
-                    var item = PageItem(kind: .text, value: value, y: 0.30)
+                TextStudioSheet(existing: nil,
+                                initialStyle: textOnSticker == nil ? nil : PageTextStyle(fontName: "Georgia", fontSize: 19)) { value, style in
+                    var item = PageItem(kind: .text, value: value,
+                                        x: textOnSticker?.x ?? 0.5,
+                                        y: (textOnSticker?.y ?? 0.28) + (textOnSticker == nil ? 0 : 0.025))
                     item.textStyle = style
+                    if let sticker = textOnSticker {
+                        item.attachedStickerID = sticker.id
+                        let note = sticker.value.hasPrefix("NoteCard") || sticker.value.hasPrefix("Label") || sticker.value == "PinkPaper"
+                        item.textWidthFactor = note ? 0.31 : 0.19
+                    }
                     library.addItem(book: bookID, page: page.id, item: item)
+                    textOnSticker = nil
+                    arrangingDecor = true
                 }
             }
         }
@@ -136,6 +162,7 @@ struct NotebookEditor: View {
                     await MainActor.run {
                         if let path = library.savePhoto(data),
                            let book = library.notebook(bookID), let page = safePage(book) {
+                            arrangingDecor = true
                             library.addItem(book: bookID, page: page.id,
                                             item: PageItem(kind: .customSticker, value: path))
                         }
@@ -151,6 +178,7 @@ struct NotebookEditor: View {
                     await MainActor.run {
                         if let path = library.savePhoto(data),
                            let book = library.notebook(bookID), let page = safePage(book) {
+                            arrangingDecor = true
                             library.addItem(book: bookID, page: page.id, item: PageItem(kind: .photo, value: path))
                         }
                         pickedPhoto = nil
@@ -196,7 +224,12 @@ struct NotebookEditor: View {
                                                   ink: ink, penColor: penColor,
                                                   strokeWidth: strokeWidth,
                                                   pageNumber: currentPage + 1,
-                                                  editText: { item in editingTextItem = item })
+                                                  arrangingDecor: arrangingDecor,
+                                                  editText: { item in editingTextItem = item },
+                                                  typeOnSticker: { item in
+                                                      textOnSticker = item
+                                                      addingText = true
+                                                  })
                                     .id(page.id)
                                     .background(Color.white)
                                     .shadow(color: Color(hex: 0x685747).opacity(0.17), radius: 19, x: 3, y: 13)
@@ -233,8 +266,8 @@ struct NotebookEditor: View {
                 .padding(.top, 22).padding(.bottom, 12)
             Button { panel = .pages } label: { StudioSideIcon(icon: "square.grid.2x2", title: "Страницы") }
             Button { panel = .paper } label: { StudioSideIcon(icon: "square.stack", title: "Бумага") }
-            Button { panel = .stickers } label: { StudioSideIcon(icon: "sparkles.rectangle.stack", title: "Стикеры") }
-            Button { addingText = true } label: { StudioSideIcon(icon: "textformat", title: "Шрифты") }
+            Button { arrangingDecor = true; panel = .stickers } label: { StudioSideIcon(icon: "sparkles.rectangle.stack", title: "Стикеры") }
+            Button { arrangingDecor = true; textOnSticker = nil; addingText = true } label: { StudioSideIcon(icon: "textformat", title: "Шрифты") }
             PhotosPicker(selection: $pickedPhoto, matching: .images) {
                 StudioSideIcon(icon: "photo", title: "Фото")
             }
@@ -261,6 +294,26 @@ struct NotebookEditor: View {
                 }
                 .padding(.horizontal, 15).padding(.vertical, 10)
                 .background(Color(hex: 0xF3EDE6), in: Capsule())
+            }
+            HStack(spacing: 4) {
+                Button { undoCurrentPage() } label: {
+                    Image(systemName: "arrow.uturn.backward")
+                        .font(.system(size: 15, weight: .medium))
+                        .frame(width: 38, height: 38)
+                        .background(Color(hex: 0xF3EDE6), in: Circle())
+                }
+                .disabled(!(safePage(book).map { library.canUndo(page: $0.id) } ?? false))
+                .opacity((safePage(book).map { library.canUndo(page: $0.id) } ?? false) ? 1 : 0.32)
+                .accessibilityLabel("Отменить действие")
+                Button { redoCurrentPage() } label: {
+                    Image(systemName: "arrow.uturn.forward")
+                        .font(.system(size: 15, weight: .medium))
+                        .frame(width: 38, height: 38)
+                        .background(Color(hex: 0xF3EDE6), in: Circle())
+                }
+                .disabled(!(safePage(book).map { library.canRedo(page: $0.id) } ?? false))
+                .opacity((safePage(book).map { library.canRedo(page: $0.id) } ?? false) ? 1 : 0.32)
+                .accessibilityLabel("Повторить действие")
             }
             Spacer(minLength: 0)
             VStack(spacing: 5) {
@@ -303,11 +356,27 @@ struct NotebookEditor: View {
     private func toolBar(_ book: Notebook) -> some View {
         ScrollView(.horizontal, showsIndicators: false) {
             HStack(spacing: 10) {
+                Button { undoCurrentPage() } label: {
+                    ToolChip(title: "Отменить", symbol: "arrow.uturn.backward", selected: false)
+                }.disabled(!(safePage(book).map { library.canUndo(page: $0.id) } ?? false))
+                    .opacity((safePage(book).map { library.canUndo(page: $0.id) } ?? false) ? 1 : 0.35)
+                Button { redoCurrentPage() } label: {
+                    ToolChip(title: "Вернуть", symbol: "arrow.uturn.forward", selected: false)
+                }.disabled(!(safePage(book).map { library.canRedo(page: $0.id) } ?? false))
+                    .opacity((safePage(book).map { library.canRedo(page: $0.id) } ?? false) ? 1 : 0.35)
+                Rectangle().fill(Color(hex: 0xD8D1CA)).frame(width: 1, height: 23)
+                Button { arrangingDecor = false } label: {
+                    ToolChip(title: "✍️ Писать сверху", symbol: "pencil.line", selected: !arrangingDecor)
+                }.buttonStyle(.plain)
+                Button { arrangingDecor = true } label: {
+                    ToolChip(title: "↔ Двигать наклейки", symbol: "hand.draw", selected: arrangingDecor)
+                }.buttonStyle(.plain)
+                Rectangle().fill(Color(hex: 0xD8D1CA)).frame(width: 1, height: 23)
                 Text("РИСОВАНИЕ")
                     .font(.system(size: 9, weight: .semibold)).tracking(1.6)
                     .foregroundStyle(AppPalette.muted).padding(.trailing, 4)
                 ForEach(InkChoice.allCases) { t in
-                    Button { ink = t } label: {
+                    Button { arrangingDecor = false; ink = t } label: {
                         ToolChip(title: t.rawValue, symbol: t.symbol, selected: ink == t)
                     }.buttonStyle(.plain)
                 }
@@ -315,6 +384,15 @@ struct NotebookEditor: View {
                     Image(systemName: "line.diagonal").font(.system(size: 11))
                     Slider(value: $strokeWidth, in: 1...14, step: 1).tint(AppPalette.rose).frame(width: 90)
                 }.foregroundStyle(AppPalette.muted).padding(.horizontal, 8)
+                HStack(spacing: 6) {
+                    ForEach([0x252932, 0xBC6F84, 0x8A729F, 0x6C9E92, 0xD39A4D, 0x5794C7], id: \.self) { hex in
+                        Button { penColor = Color(hex: UInt32(hex)) } label: {
+                            Circle().fill(Color(hex: UInt32(hex)))
+                                .frame(width: 20, height: 20)
+                                .overlay(Circle().stroke(.white, lineWidth: 2))
+                        }.accessibilityLabel("Цвет чернил")
+                    }
+                }
                 Button { panel = .inkColors } label: {
                     HStack(spacing: 6) {
                         Circle().fill(penColor).frame(width: 22, height: 22)
@@ -326,10 +404,10 @@ struct NotebookEditor: View {
                     .background(.white.opacity(0.9), in: RoundedRectangle(cornerRadius: 12))
                 }.buttonStyle(.plain)
                 Rectangle().fill(Color(hex: 0xD8D1CA)).frame(width: 1, height: 23).padding(.horizontal, 4)
-                Button { addingText = true } label: {
+                Button { arrangingDecor = true; textOnSticker = nil; addingText = true } label: {
                     ToolChip(title: "Текст и шрифты", symbol: "textformat", selected: false)
                 }.buttonStyle(.plain)
-                Button { panel = .stickers } label: {
+                Button { arrangingDecor = true; panel = .stickers } label: {
                     ToolChip(title: "Стикеры", symbol: "sparkles", selected: false)
                 }.buttonStyle(.plain)
                 Button { panel = .paper } label: {
@@ -346,6 +424,16 @@ struct NotebookEditor: View {
         }
         .background(Color(hex: 0xFFFAF6).opacity(0.98))
         .overlay(alignment: .top) { Rectangle().fill(Color(hex: 0xDFD5CC)).frame(height: 1) }
+    }
+
+    private func undoCurrentPage() {
+        guard let book = library.notebook(bookID), let page = safePage(book) else { return }
+        library.undo(book: bookID, page: page.id)
+    }
+
+    private func redoCurrentPage() {
+        guard let book = library.notebook(bookID), let page = safePage(book) else { return }
+        library.redo(book: bookID, page: page.id)
     }
 
     private func turnPage(_ direction: Int) {
@@ -419,7 +507,9 @@ struct JournalPageCanvas: View {
     let penColor: Color
     let strokeWidth: Double
     let pageNumber: Int
+    let arrangingDecor: Bool
     let editText: (PageItem) -> Void
+    let typeOnSticker: (PageItem) -> Void
 
     var body: some View {
         ZStack(alignment: .topLeading) {
@@ -434,13 +524,20 @@ struct JournalPageCanvas: View {
                     .frame(width: width, height: height).clipped()
                     .allowsHitTesting(false)
             }
-            PenCanvas(pageID: page.id, library: library, ink: ink,
-                      color: UIColor(penColor), strokeWidth: CGFloat(strokeWidth))
+            // Декор на бумаге. В режиме расстановки можно двигать элементы.
             ForEach(page.items) { item in
                 DraggablePageItem(item: item, pageID: page.id, bookID: bookID,
-                                  library: library, width: width, height: height, editText: editText)
+                                  library: library, width: width, height: height,
+                                  editText: editText, typeOnSticker: typeOnSticker)
                     .position(x: width * item.x, y: height * item.y)
+                    .allowsHitTesting(arrangingDecor)
             }
+            // Слой PencilKit теперь НАД декором: рукописные слова видны на стикерах.
+            PenCanvas(pageID: page.id, library: library, ink: ink,
+                      color: UIColor(penColor), strokeWidth: CGFloat(strokeWidth),
+                      isEnabled: !arrangingDecor,
+                      revision: library.inkRevision)
+                .allowsHitTesting(!arrangingDecor)
             VStack {
                 HStack {
                     if page.backgroundFile == nil {
@@ -484,6 +581,7 @@ struct DraggablePageItem: View {
     let width: CGFloat
     let height: CGFloat
     let editText: (PageItem) -> Void
+    let typeOnSticker: (PageItem) -> Void
     @State private var drag: CGSize = .zero
     @State private var pinch: CGFloat = 1
     @State private var twist: Angle = .zero
@@ -525,10 +623,27 @@ struct DraggablePageItem: View {
             )
             .onTapGesture(count: 2) {
                 if item.kind == .text { editText(item) }
+                else { typeOnSticker(item) }
             }
             .contextMenu {
                 if item.kind == .text {
                     Button("Изменить текст и шрифт", systemImage: "character.cursor.ibeam") { editText(item) }
+                } else {
+                    Button("Напечатать на наклейке", systemImage: "textformat") { typeOnSticker(item) }
+                }
+                Button("На передний план", systemImage: "square.3.layers.3d.top.filled") {
+                    library.bringForward(book: bookID, page: pageID, item: item.id)
+                }
+                Button("На задний план", systemImage: "square.3.layers.3d.bottom.filled") {
+                    library.sendBackward(book: bookID, page: pageID, item: item.id)
+                }
+                if item.kind != .text {
+                    Menu("Повернуть наклейку", systemImage: "rotate.right") {
+                        Button("↶ На 15° влево") { library.rotateItem(book: bookID, page: pageID, item: item.id, degrees: -15) }
+                        Button("↷ На 15° вправо") { library.rotateItem(book: bookID, page: pageID, item: item.id, degrees: 15) }
+                        Button("↶ На 90° влево") { library.rotateItem(book: bookID, page: pageID, item: item.id, degrees: -90) }
+                        Button("↷ На 90° вправо") { library.rotateItem(book: bookID, page: pageID, item: item.id, degrees: 90) }
+                    }
                 }
                 Button("Копировать украшение", systemImage: "plus.square.on.square") {
                     library.duplicateItem(book: bookID, page: pageID, item: item.id)
@@ -544,7 +659,9 @@ struct DraggablePageItem: View {
         switch item.kind {
         case .sticker:
             Image("Sticker_\(item.value)")
-                .resizable().scaledToFit().frame(width: width * 0.22, height: width * 0.22)
+                .resizable().scaledToFit()
+                .frame(width: width * (item.value.hasPrefix("Frame") ? 0.92 : 0.22),
+                       height: item.value.hasPrefix("Frame") ? height * 0.94 : width * 0.22)
         case .customSticker:
             if let image = library.photo(named: item.value) {
                 Image(uiImage: image)
@@ -564,7 +681,9 @@ struct DraggablePageItem: View {
                 .tracking(style.letterSpacing * width / 650)
                 .foregroundStyle(Color(hex: style.colorHex).opacity(style.opacity))
                 .multilineTextAlignment(style.alignment == "left" ? .leading : style.alignment == "right" ? .trailing : .center)
-                .frame(width: width * 0.66)
+                .frame(width: width * (item.textWidthFactor ?? 0.66))
+                .lineLimit(item.attachedStickerID == nil ? nil : 6)
+                .minimumScaleFactor(0.60)
                 .padding(style.backgroundHex == nil ? 2 : 11)
                 .background {
                     if let hex = style.backgroundHex {
@@ -575,116 +694,300 @@ struct DraggablePageItem: View {
     }
 }
 
+// Paper is drawn locally on the iPad so all patterns work offline and stay sharp at any zoom.
 struct PaperBackground: View {
     let style: String
     var customHex: UInt32? = nil
-    private var paperColor: Color {
-        if let customHex { return Color(hex: customHex) }
-        switch style {
-        case "Blush", "Rose Lines": return Color(hex: 0xFFF0F0)
-        case "Cream Grid", "Vintage", "Daily Plan", "Checklist", "Cornell": return Color(hex: 0xFFF6E9)
-        case "Lilac": return Color(hex: 0xF2EFF9)
-        case "Sage": return Color(hex: 0xF1F4EC)
-        case "Dark": return Color(hex: 0x2E3441)
-        case "Peach": return Color(hex: 0xFFE4D8)
-        case "Lemon": return Color(hex: 0xFFF7C9)
-        case "Sea Glass": return Color(hex: 0xD9EEE7)
-        case "Powder Blue": return Color(hex: 0xE3F0FD)
-        case "Ballet Pink": return Color(hex: 0xFCE1EA)
-        case "Dusty Rose": return Color(hex: 0xEBC9CF)
-        case "Ivory Gold": return Color(hex: 0xF8EBD8)
-        case "Bluebell": return Color(hex: 0xE3E5F9)
-        case "Caramel": return Color(hex: 0xEEDDCB)
-        case "Mauve": return Color(hex: 0xE6D7E6)
-        case "Aqua": return Color(hex: 0xD6F4F0)
-        case "Almond": return Color(hex: 0xF4E3CE)
-        default: return Color(hex: 0xFFFDF7)
-        }
-    }
+
     var body: some View {
-        Canvas { context, size in
-            context.fill(Path(CGRect(origin: .zero, size: size)), with: .color(paperColor))
-            if style == "Lines" || style == "Grid" || style == "Rose Lines" || style == "Cream Grid" || style == "Cornell" {
-                let gap: CGFloat = 27
-                for y in stride(from: 55.0, through: size.height, by: gap) {
-                    var p = Path(); p.move(to: CGPoint(x: 20, y: y)); p.addLine(to: CGPoint(x: size.width-20, y: y))
-                    context.stroke(p, with: .color(Color(hex: 0xBCC4D1).opacity(0.5)), lineWidth: 0.55)
+        Canvas { ctx, size in
+            let preset = PaperCatalog.find(style)
+            let bg = customHex ?? preset?.background ?? 0xFFFDF7
+            let accent = preset?.accent ?? 0xBFB6AF
+            let ink = Color(hex: accent)
+            let pattern = preset?.pattern ?? "blank"
+            let k = max(CGFloat(0.15), size.width / 700)
+            ctx.fill(Path(CGRect(origin: .zero, size: size)), with: .color(Color(hex: bg)))
+            let w = size.width; let h = size.height
+            let left = 38*k; let right = w - 38*k
+            func line(_ x1: CGFloat, _ y1: CGFloat, _ x2: CGFloat, _ y2: CGFloat, _ alpha: Double = 0.43, _ thickness: CGFloat = 0.75) {
+                var path = Path()
+                path.move(to: CGPoint(x: x1, y: y1))
+                path.addLine(to: CGPoint(x: x2, y: y2))
+                ctx.stroke(path, with: .color(ink.opacity(alpha)), lineWidth: thickness*k)
+            }
+            func frame(_ x: CGFloat, _ y: CGFloat, _ width: CGFloat, _ height: CGFloat, _ alpha: Double = 0.62, _ radius: CGFloat = 9) {
+                guard width > 0, height > 0 else { return }
+                ctx.stroke(Path(roundedRect: CGRect(x: x, y: y, width: width, height: height), cornerRadius: radius*k),
+                           with: .color(ink.opacity(alpha)), lineWidth: 1*k)
+            }
+            func title(_ value: String, _ x: CGFloat, _ y: CGFloat, _ fontSize: CGFloat = 14) {
+                let text = Text(value).font(.system(size: fontSize*k, weight: .semibold, design: .rounded))
+                    .foregroundColor(ink.opacity(0.82))
+                ctx.draw(ctx.resolve(text), at: CGPoint(x: x, y: y), anchor: .leading)
+            }
+            func lines(_ gap: CGFloat = 34, _ start: CGFloat = 102) {
+                for y in stride(from: start*k, through: h - 40*k, by: gap*k) {
+                    line(left, y, right, y)
                 }
-                if style == "Grid" || style == "Cream Grid" {
-                    for x in stride(from: 20.0, through: size.width-20, by: gap) {
-                        var p = Path(); p.move(to: CGPoint(x: x, y: 20)); p.addLine(to: CGPoint(x: x, y: size.height-20))
-                        context.stroke(p, with: .color(Color(hex: 0xBCC4D1).opacity(0.32)), lineWidth: 0.5)
-                    }
-                }
-            } else if style == "Daily Plan" || style == "Checklist" {
-                let ink = Color(hex: 0xC7B3AB).opacity(0.52)
-                for n in 0..<14 {
-                    let y: CGFloat = 125 + CGFloat(n) * 39
-                    var row = Path()
-                    row.move(to: CGPoint(x: 65, y: y))
-                    row.addLine(to: CGPoint(x: size.width - 45, y: y))
-                    context.stroke(row, with: .color(ink), lineWidth: 0.8)
-                    if style == "Checklist" {
-                        let box = Path(roundedRect: CGRect(x: 36, y: y - 14, width: 16, height: 16), cornerRadius: 4)
-                        context.stroke(box, with: .color(ink), lineWidth: 1.2)
-                    }
-                }
-            } else if style == "Dots" {
-                for y in stride(from: 24.0, through: size.height-18, by: 24) {
-                    for x in stride(from: 24.0, through: size.width-18, by: 24) {
-                        let point = Path(ellipseIn: CGRect(x: x, y: y, width: 1.5, height: 1.5))
-                        context.fill(point, with: .color(Color(hex: 0xB4A5B0).opacity(0.5)))
+            }
+            func grid(_ gap: CGFloat = 32, _ alpha: Double = 0.30) {
+                for y in stride(from: 22*k, through: h-22*k, by: gap*k) { line(24*k,y,w-24*k,y,alpha) }
+                for x in stride(from: 24*k, through: w-24*k, by: gap*k) { line(x,24*k,x,h-24*k,alpha) }
+            }
+            func dots() {
+                let step: CGFloat = 31*k
+                for y in stride(from: 26*k, through: h-25*k, by: step) {
+                    for x in stride(from: 27*k, through: w-25*k, by: step) {
+                        let r: CGFloat = 2.0*k
+                        ctx.fill(Path(ellipseIn: CGRect(x: x-r/2,y:y-r/2,width:r,height:r)),
+                                 with: .color(ink.opacity(0.50)))
                     }
                 }
             }
-            if style == "Cornell" {
-                var column = Path()
-                column.move(to: CGPoint(x: size.width * 0.30, y: 55))
-                column.addLine(to: CGPoint(x: size.width * 0.30, y: size.height - 160))
-                column.move(to: CGPoint(x: 22, y: size.height - 160))
-                column.addLine(to: CGPoint(x: size.width - 22, y: size.height - 160))
-                context.stroke(column, with: .color(Color(hex: 0xBCA6A3).opacity(0.7)), lineWidth: 1)
+            func rectangleGrid(_ cols: Int, _ rows: Int, _ x: CGFloat, _ y: CGFloat, _ bw: CGFloat, _ bh: CGFloat) {
+                frame(x,y,bw,bh,0.52)
+                for c in 1..<cols { let pos=x+bw*CGFloat(c)/CGFloat(cols);line(pos,y,pos,y+bh,0.50) }
+                for r in 1..<rows { let pos=y+bh*CGFloat(r)/CGFloat(rows);line(x,pos,x+bw,pos,0.50) }
             }
-            if style == "Vintage" {
-                let outer = Path(roundedRect: CGRect(x: 24, y: 27, width: size.width - 48,
-                                                     height: size.height - 54), cornerRadius: 7)
-                let inner = Path(roundedRect: CGRect(x: 35, y: 38, width: size.width - 70,
-                                                     height: size.height - 76), cornerRadius: 5)
-                context.stroke(outer, with: .color(Color(hex: 0xBE9C80).opacity(0.45)), lineWidth: 1.5)
-                context.stroke(inner, with: .color(Color(hex: 0xBE9C80).opacity(0.3)), lineWidth: 0.7)
+            func tinyFlower(_ x: CGFloat, _ y: CGFloat, _ scale: CGFloat = 1) {
+                let rad: CGFloat = 5.6*k*scale
+                for n in 0..<5 {
+                    let a = CGFloat(n)*(.pi*2/5)
+                    let p = CGRect(x:x+cos(a)*rad-rad*0.49,y:y+sin(a)*rad-rad*0.49,
+                                   width:rad*0.98,height:rad*0.98)
+                    ctx.fill(Path(ellipseIn:p),with:.color(ink.opacity(0.27)))
+                }
+                ctx.fill(Path(ellipseIn:CGRect(x:x-2.5*k,y:y-2.5*k,width:5*k,height:5*k)),
+                         with:.color(Color(hex:0xE8CC9F).opacity(0.65)))
+            }
+            func heart(_ x: CGFloat, _ y: CGFloat) {
+                ctx.fill(Path(ellipseIn: CGRect(x:x-4*k,y:y-2*k,width:7*k,height:7*k)),with:.color(ink.opacity(0.32)))
+                ctx.fill(Path(ellipseIn: CGRect(x:x+1*k,y:y-2*k,width:7*k,height:7*k)),with:.color(ink.opacity(0.32)))
+                var t = Path();t.move(to:CGPoint(x:x-4*k,y:y+2*k));t.addLine(to:CGPoint(x:x+4*k,y:y+10*k));t.addLine(to:CGPoint(x:x+9*k,y:y+2*k));t.closeSubpath()
+                ctx.fill(t,with:.color(ink.opacity(0.32)))
+            }
+            switch pattern {
+            case "lines", "thinlines", "doublelines", "margin", "rainbowlines":
+                let step: CGFloat = pattern == "thinlines" ? 24 : 34
+                lines(step)
+                if pattern == "doublelines" {
+                    for y in stride(from: 102*k, through:h-40*k, by:step*k) { line(left,y+5*k,right,y+5*k,0.21) }
+                }
+                if pattern == "margin" { line(100*k,56*k,100*k,h-46*k,0.6,1.3) }
+                if pattern == "rainbowlines" {
+                    for i in 0..<4 { line(26*k,CGFloat(28+i*9)*k,right,CGFloat(28+i*9)*k,0.23,2.5) }
+                }
+            case "grid", "finegrid": grid(pattern == "finegrid" ? 16 : 34)
+            case "dots": dots()
+            case "gingham":
+                for x in stride(from: 0.0, through:w, by:42*k) {
+                    let r=CGRect(x:x,y:0,width:17*k,height:h)
+                    ctx.fill(Path(r),with:.color(ink.opacity(0.095)))
+                    line(x,0,x,h,0.15)
+                }
+                for y in stride(from: 0.0, through:h, by:42*k) {
+                    ctx.fill(Path(CGRect(x:0,y:y,width:w,height:17*k)),with:.color(ink.opacity(0.095)))
+                    line(0,y,w,y,0.15)
+                }
+            case "stripes":
+                for y in stride(from: 0.0, through:h, by:48*k) {
+                    ctx.fill(Path(CGRect(x:0,y:y,width:w,height:9*k)),with:.color(ink.opacity(0.13)))
+                }
+            case "waves", "rain":
+                for row in 0..<22 {
+                    let y=CGFloat(row)*47*k+26*k
+                    var path=Path();path.move(to:CGPoint(x:25*k,y:y))
+                    for i in 0...60 {
+                        let x=25*k+(w-50*k)*CGFloat(i)/60
+                        path.addLine(to:CGPoint(x:x,y:y+sin(CGFloat(i)*0.38)*4*k))
+                    }
+                    ctx.stroke(path,with:.color(ink.opacity(pattern == "rain" ? 0.18 : 0.27)),lineWidth:1*k)
+                }
+            case "confetti", "hearts", "stars", "bows", "clouds":
+                for y in stride(from: 64*k, through:h-40*k, by:125*k) {
+                    for x in stride(from: 62*k, through:w-40*k, by:125*k) {
+                        if pattern == "hearts" { heart(x,y) }
+                        else if pattern == "stars" {
+                            for i in 0..<4 { let a=CGFloat(i)*CGFloat.pi/2;line(x-cos(a)*5*k,y-sin(a)*5*k,x+cos(a)*5*k,y+sin(a)*5*k,0.35) }
+                        } else if pattern == "bows" {
+                            ctx.stroke(Path(ellipseIn:CGRect(x:x-12*k,y:y-4*k,width:12*k,height:9*k)),with:.color(ink.opacity(0.36)),lineWidth:2*k)
+                            ctx.stroke(Path(ellipseIn:CGRect(x:x+1*k,y:y-4*k,width:12*k,height:9*k)),with:.color(ink.opacity(0.36)),lineWidth:2*k)
+                        } else if pattern == "clouds" {
+                            for n in 0..<3 { ctx.fill(Path(ellipseIn:CGRect(x:x+CGFloat(n*8)*k,y:y-6*k,width:15*k,height:11*k)),with:.color(ink.opacity(0.16))) }
+                        } else { tinyFlower(x,y,0.50) }
+                    }
+                }
+            case "flowers", "leaves", "botanical", "lace":
+                frame(29*k,32*k,w-58*k,h-64*k,0.32,18)
+                for i in 0..<14 {
+                    let y=(50+CGFloat(i)*57)*k
+                    if y>h-26*k { break }
+                    if pattern == "leaves" || pattern == "botanical" {
+                        ctx.fill(Path(ellipseIn:CGRect(x:27*k,y:y,width:12*k,height:21*k)),with:.color(ink.opacity(0.25)))
+                        ctx.fill(Path(ellipseIn:CGRect(x:w-39*k,y:y,width:12*k,height:21*k)),with:.color(ink.opacity(0.25)))
+                    } else {
+                        tinyFlower(37*k,y,0.72);tinyFlower(w-37*k,y,0.72)
+                    }
+                }
+                if pattern == "botanical" { title("BOTANICAL NOTES",66*k,76*k,13) }
+            case "vintage", "postcard", "kraft", "torn":
+                frame(27*k,30*k,w-54*k,h-60*k,0.46)
+                frame(39*k,42*k,w-78*k,h-84*k,0.27)
+                if pattern == "postcard" { title("POSTCARD  •  MEMORIES",70*k,80*k);line(left,112*k,right,112*k,0.34) }
+                if pattern == "torn" {
+                    for n in 0..<24 { let x=(24+CGFloat(n)*26)*k;line(x,22*k,x+11*k,30*k,0.21) }
+                }
+            case "washi", "tabs", "photo", "polaroids", "memory":
+                if pattern == "tabs" {
+                    for i in 0..<6 {
+                        let y=CGFloat(120+i*95)*k
+                        ctx.fill(Path(roundedRect:CGRect(x:w-46*k,y:y,width:46*k,height:55*k),cornerRadius:5*k),with:.color(ink.opacity(Double(0.14+0.05*Double(i%3)))))
+                    }
+                    lines(38)
+                } else if pattern == "washi" {
+                    for row in 0..<4 {
+                        let y=CGFloat(100+row*195)*k
+                        ctx.fill(Path(CGRect(x:52*k,y:y,width:w-104*k,height:14*k)),with:.color(ink.opacity(0.20)))
+                        frame(58*k,y+31*k,w-116*k,135*k,0.35)
+                    }
+                } else {
+                    for row in 0..<3 {
+                        let y=(85+CGFloat(row)*260)*k
+                        let margin=58*k;let gap=22*k;let bw=(w-2*margin-gap)/2
+                        for col in 0..<2 {
+                            let x=margin+CGFloat(col)*(bw+gap)
+                            frame(x,y,bw,210*k,0.55,7)
+                            frame(x+12*k,y+12*k,bw-24*k,145*k,0.25,5)
+                            line(x+13*k,y+172*k,x+bw-13*k,y+172*k,0.34)
+                        }
+                    }
+                }
+            case "cornell", "study", "class", "reading", "recipe", "morning", "gratitude", "dream":
+                title(pattern == "recipe" ? "РЕЦЕПТ" : pattern == "reading" ? "МОИ КНИГИ" : pattern == "dream" ? "ДНЕВНИК СНОВ" : "МОИ ЗАМЕТКИ", 58*k,75*k)
+                line(left,106*k,right,106*k,0.60)
+                lines(37,150)
+                if pattern == "cornell" || pattern == "study" || pattern == "class" {
+                    line(180*k,126*k,180*k,h-150*k,0.48,1.3)
+                    line(left,h-142*k,right,h-142*k,0.45,1.3)
+                }
+                if pattern == "gratitude" { for n in 0..<8 { heart(56*k,CGFloat(166+n*75)*k) } }
+            case "daily", "checklist", "schedule", "goals", "meal", "project":
+                title(pattern == "meal" ? "ПЛАН ПИТАНИЯ" : pattern == "goals" ? "МОИ ЦЕЛИ" : pattern == "project" ? "ПРОЕКТ" : "ПЛАН НА ДЕНЬ",60*k,77*k)
+                line(left,108*k,right,108*k,0.6)
+                for i in 0..<15 {
+                    let y=CGFloat(158+i*45)*k
+                    line(84*k,y,right,y,0.43)
+                    if pattern != "daily" {
+                        frame(51*k,y-21*k,18*k,18*k,0.5,3)
+                    }
+                }
+            case "calendar", "weekly", "tracker", "mood", "budget":
+                title(pattern == "calendar" ? "КАЛЕНДАРЬ МЕСЯЦА" : pattern == "tracker" ? "ТРЕКЕР ПРИВЫЧЕК" : pattern == "mood" ? "НАСТРОЕНИЕ" : pattern == "budget" ? "МОЙ БЮДЖЕТ" : "МОЯ НЕДЕЛЯ", 46*k,70*k)
+                line(left,105*k,right,105*k,0.48)
+                if pattern == "calendar" { rectangleGrid(7,6,39*k,168*k,w-78*k,520*k) }
+                else if pattern == "weekly" { rectangleGrid(2,4,39*k,148*k,w-78*k,h-206*k) }
+                else if pattern == "tracker" { rectangleGrid(8,11,40*k,163*k,w-80*k,580*k) }
+                else if pattern == "mood" {
+                    for row in 0..<5 {
+                        for col in 0..<6 {
+                            let x=(92+CGFloat(col)*104)*k;let y=(192+CGFloat(row)*115)*k
+                            ctx.stroke(Path(ellipseIn:CGRect(x:x,y:y,width:44*k,height:44*k)),with:.color(ink.opacity(0.5)),lineWidth:1*k)
+                        }
+                    }
+                } else { rectangleGrid(3,12,40*k,156*k,w-80*k,620*k) }
+            case "mindmap":
+                frame(w*0.34,h*0.40,w*0.32,h*0.15,0.62,20)
+                for i in 0..<6 {
+                    let a=CGFloat(i)*CGFloat.pi/3
+                    let x=w*0.5+cos(a)*w*0.34;let y=h*0.48+sin(a)*h*0.31
+                    line(w*0.5,h*0.47,x,y,0.3)
+                    frame(x-60*k,y-40*k,120*k,80*k,0.45,14)
+                }
+            case "storyboard":
+                for row in 0..<4 {
+                    for col in 0..<2 {
+                        let x=(50+CGFloat(col)*325)*k;let y=(130+CGFloat(row)*190)*k
+                        frame(x,y,290*k,156*k,0.50,7)
+                    }
+                }
+            case "music":
+                for group in 0..<9 {
+                    let y=CGFloat(95+group*88)*k
+                    for j in 0..<5 {line(left,y+CGFloat(j*11)*k,right,y+CGFloat(j*11)*k,0.52)}
+                }
+            default: break
             }
         }
+        .accessibilityLabel(PaperCatalog.find(style)?.title ?? "Бумага")
     }
 }
 
 struct StickerPalette: View {
     let add: (String) -> Void
-    private let columns = [GridItem(.adaptive(minimum: 95), spacing: 12)]
+    @State private var category = "Все"
+    @State private var search = ""
+    private let columns = [GridItem(.adaptive(minimum: 104, maximum: 150), spacing: 12)]
+    private var filtered: [StickerEntry] {
+        StickerCatalog.all.filter { entry in
+            (category == "Все" || entry.category == category) &&
+            (search.isEmpty || entry.title.localizedCaseInsensitiveContains(search))
+        }
+    }
     var body: some View {
         NavigationStack {
             ScrollView {
-                VStack(alignment: .leading, spacing: 18) {
-                    VStack(alignment: .leading, spacing: 7) {
+                VStack(alignment: .leading, spacing: 16) {
+                    VStack(alignment: .leading, spacing: 6) {
                         Text("Коллекция украшений")
-                            .font(.system(size: 25, design: .serif)).foregroundStyle(AppPalette.midnight)
-                        Text("Всё бесплатно · Перемещай, вращай и масштабируй на странице")
+                            .font(.system(size: 28, design: .serif)).foregroundStyle(AppPalette.midnight)
+                        Text("\(StickerCatalog.all.count) бесплатных украшений · работают без интернета")
                             .font(.system(size: 12)).foregroundStyle(AppPalette.muted)
                     }
-                    LazyVGrid(columns: columns, spacing: 13) {
-                        ForEach(AppPalette.stickers.indices, id: \.self) { index in
-                            let sticker = AppPalette.stickers[index]
-                            Button { add(sticker.0) } label: {
-                                VStack(spacing: 5) {
-                                    Image("Sticker_\(sticker.0)").resizable().scaledToFit()
-                                        .frame(height: 105)
-                                    Text(sticker.1).font(.system(size: 12)).foregroundStyle(AppPalette.midnight)
-                                }
-                                .frame(maxWidth: .infinity)
-                                .padding(.vertical, 16)
-                                .background(.white.opacity(0.80), in: RoundedRectangle(cornerRadius: 16))
-                                .overlay(RoundedRectangle(cornerRadius: 16).stroke(Color(hex: 0xE8DED4), lineWidth: 1))
-                            }.buttonStyle(.plain)
+                    TextField("Найти тему: осень, зима, книги, горы…", text: $search)
+                        .textFieldStyle(.roundedBorder)
+                    ScrollView(.horizontal, showsIndicators: false) {
+                        HStack(spacing: 8) {
+                            ForEach(StickerCatalog.categories, id: \.self) { section in
+                                Button { category = section } label: {
+                                    Text(section)
+                                        .font(.system(size: 13, weight: .medium))
+                                        .foregroundStyle(category == section ? .white : AppPalette.midnight)
+                                        .padding(.horizontal, 13).padding(.vertical, 9)
+                                        .background(category == section ? AppPalette.rose : Color.white.opacity(0.87), in: Capsule())
+                                }.buttonStyle(.plain)
+                            }
                         }
+                    }
+                    if filtered.isEmpty {
+                        ContentUnavailableView("Ничего не найдено", systemImage: "magnifyingglass")
+                    } else {
+                        LazyVGrid(columns: columns, spacing: 12) {
+                            ForEach(filtered) { sticker in
+                                Button { add(sticker.id) } label: {
+                                    VStack(spacing: 6) {
+                                        Image("Sticker_\(sticker.id)")
+                                            .resizable().scaledToFit()
+                                            .frame(height: 100)
+                                            .padding(.horizontal, 6)
+                                        Text(sticker.title)
+                                            .font(.system(size: 11, weight: .medium))
+                                            .lineLimit(2)
+                                            .multilineTextAlignment(.center)
+                                            .foregroundStyle(AppPalette.midnight)
+                                            .frame(height: 30)
+                                    }
+                                    .frame(maxWidth: .infinity)
+                                    .padding(.vertical, 10)
+                                    .background(.white.opacity(0.88), in: RoundedRectangle(cornerRadius: 16))
+                                    .overlay(RoundedRectangle(cornerRadius: 16).stroke(Color(hex: 0xE8DED4)))
+                                }.buttonStyle(.plain)
+                            }
+                        }
+                    }
+                    if category == "Рамки" || category == "Все" {
+                        Text("Нажми на наклейку дважды, чтобы набрать текст. Удерживай для поворота, копирования и слоёв. Двигай пальцем, крути двумя пальцами.")
+                            .font(.system(size: 12)).foregroundStyle(AppPalette.muted)
                     }
                 }.padding(24)
             }
@@ -701,8 +1004,16 @@ struct PaperPalette: View {
     let customHex: UInt32?
     let select: (String) -> Void
     let chooseCustom: (UInt32) -> Void
-    @State private var customColor: Color = Color(hex: 0xFAE5EC)
-    private let columns = [GridItem(.adaptive(minimum: 120), spacing: 15)]
+    @State private var customColor: Color
+    @State private var category = "Все"
+    @State private var search = ""
+    private let columns = [GridItem(.adaptive(minimum: 128, maximum: 190), spacing: 14)]
+    private var papers: [PaperPreset] {
+        PaperCatalog.all.filter { item in
+            (category == "Все" || item.category == category) &&
+            (search.isEmpty || item.title.localizedCaseInsensitiveContains(search))
+        }
+    }
 
     init(current: String, customHex: UInt32?, select: @escaping (String) -> Void,
          chooseCustom: @escaping (UInt32) -> Void) {
@@ -716,34 +1027,69 @@ struct PaperPalette: View {
     var body: some View {
         NavigationStack {
             ScrollView {
-                VStack(alignment: .leading, spacing: 18) {
-                    Text("Свой оттенок бумаги")
-                        .font(.system(size: 21, design: .serif))
+                VStack(alignment: .leading, spacing: 16) {
+                    HStack {
+                        Text("93 вида бумаги и шаблонов")
+                            .font(.system(size: 21, design: .serif))
+                        Spacer()
+                        Text("Бесплатно · офлайн")
+                            .font(.system(size: 11, weight: .medium)).foregroundStyle(AppPalette.rose)
+                    }
+                    TextField("Найти бумагу или шаблон...", text: $search)
+                        .textFieldStyle(.roundedBorder)
+                    ScrollView(.horizontal, showsIndicators: false) {
+                        HStack(spacing: 9) {
+                            ForEach(PaperCatalog.categories, id: \.self) { cat in
+                                Button { category = cat } label: {
+                                    Text(cat).font(.system(size: 12, weight: .medium))
+                                        .padding(.horizontal, 13).padding(.vertical, 10)
+                                        .foregroundStyle(category == cat ? Color.white : AppPalette.midnight)
+                                        .background(category == cat ? AppPalette.rose : Color(hex: 0xEEE5DE), in: Capsule())
+                                }.buttonStyle(.plain)
+                            }
+                        }
+                    }
                     HStack(spacing: 12) {
-                        ColorPicker("Выбрать любой цвет", selection: $customColor, supportsOpacity: false)
+                        ColorPicker("Свой оттенок", selection: $customColor, supportsOpacity: false)
                         Button("Применить") { chooseCustom(customColor.hexValue) }
                             .buttonStyle(.borderedProminent).tint(AppPalette.rose)
                     }
-                    .padding(16).background(.white, in: RoundedRectangle(cornerRadius: 15))
-                    Text("Готовые страницы").font(.system(size: 21, design: .serif))
-                    LazyVGrid(columns: columns, spacing: 16) {
-                        ForEach(AppPalette.papers, id: \.self) { paper in
-                            Button { select(paper) } label: {
+                    .font(.system(size: 13))
+                    .padding(14)
+                    .background(.white, in: RoundedRectangle(cornerRadius: 14))
+                    LazyVGrid(columns: columns, spacing: 15) {
+                        ForEach(papers) { option in
+                            Button { select(option.id) } label: {
                                 VStack(spacing: 8) {
-                                    PaperBackground(style: paper)
-                                        .aspectRatio(0.75, contentMode: .fit)
-                                        .overlay(RoundedRectangle(cornerRadius: 7)
-                                            .stroke(current == paper ? AppPalette.rose : Color(hex: 0xD5C8C3), lineWidth: current == paper ? 3 : 1))
-                                        .clipShape(RoundedRectangle(cornerRadius: 7))
-                                    Text(paper).font(.system(size: 13, design: .serif)).foregroundStyle(AppPalette.midnight)
+                                    PaperBackground(style: option.id)
+                                        .aspectRatio(0.74, contentMode: .fit)
+                                        .clipShape(RoundedRectangle(cornerRadius: 10))
+                                        .overlay(RoundedRectangle(cornerRadius: 10)
+                                            .stroke(current == option.id ? AppPalette.rose : Color(hex: 0xE3D8D1), lineWidth: current == option.id ? 3 : 1))
+                                        .shadow(color: .black.opacity(0.06), radius: 5, y: 2)
+                                        .overlay(alignment: .topTrailing) {
+                                            if current == option.id {
+                                                Image(systemName: "checkmark.circle.fill")
+                                                    .foregroundStyle(AppPalette.rose).padding(5)
+                                            }
+                                        }
+                                    Text(option.title).font(.system(size: 12, design: .serif))
+                                        .foregroundStyle(AppPalette.midnight)
+                                        .lineLimit(2).multilineTextAlignment(.center)
+                                    Text(option.category).font(.system(size: 9))
+                                        .foregroundStyle(AppPalette.muted)
                                 }
+                                .frame(maxWidth: .infinity)
+                                .padding(8)
+                                .background(.white.opacity(0.7), in: RoundedRectangle(cornerRadius: 12))
                             }.buttonStyle(.plain)
                         }
                     }
-                }.padding(24)
+                }.padding(20)
             }
             .background(AppPalette.parchment)
-            .navigationTitle("Бумага и цвета")
-        }.presentationDetents([.medium, .large])
+            .navigationTitle("Бумага и шаблоны")
+            .navigationBarTitleDisplayMode(.inline)
+        }.presentationDetents([.large])
     }
 }

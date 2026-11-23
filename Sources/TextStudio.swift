@@ -110,11 +110,12 @@ struct TextStudioSheet: View {
     @State private var fontSearch = ""
     @State private var section = 0
 
-    init(existing: PageItem?, save: @escaping (String, PageTextStyle) -> Void) {
+    init(existing: PageItem?, initialStyle: PageTextStyle? = nil,
+         save: @escaping (String, PageTextStyle) -> Void) {
         self.existing = existing
         self.save = save
         _text = State(initialValue: existing?.value ?? "")
-        _style = State(initialValue: existing?.textStyle ?? PageTextStyle())
+        _style = State(initialValue: existing?.textStyle ?? initialStyle ?? PageTextStyle())
     }
 
     private let sections = ["Шрифты", "Цвета", "Оформление"]

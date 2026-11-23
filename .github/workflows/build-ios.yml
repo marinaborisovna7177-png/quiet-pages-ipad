@@ -11,6 +11,15 @@ jobs:
         uses: actions/checkout@v4
       - name: Выбрать Xcode
         run: xcodebuild -version
+      - name: Распаковать 2000 стикеров для офлайн-приложения
+        shell: bash
+        run: |
+          set -euo pipefail
+          for pack in StickerPacks/MegaStickers_*.zip; do
+            unzip -qo "$pack" -d Resources/Assets.xcassets
+          done
+          echo "Imported sticker imagesets: $(find Resources/Assets.xcassets -name 'Sticker_Mega_*.imageset' -type d | wc -l)"
+          test "$(find Resources/Assets.xcassets -name 'Sticker_Mega_*.imageset' -type d | wc -l)" -eq 2000
       - name: Собрать iPadOS приложение без подписи
         run: |
           set -euo pipefail

@@ -7,6 +7,8 @@ struct PenCanvas: UIViewRepresentable {
     let ink: InkChoice
     let color: UIColor
     let strokeWidth: CGFloat
+    let isEnabled: Bool
+    let revision: Int
 
     func makeCoordinator() -> Coordinator { Coordinator(self) }
 
@@ -16,36 +18,55 @@ struct PenCanvas: UIViewRepresentable {
         canvas.isOpaque = false
         canvas.isScrollEnabled = false
         canvas.drawingPolicy = .anyInput
+        canvas.isUserInteractionEnabled = isEnabled
+        context.coordinator.suppressChanges = true
         canvas.delegate = context.coordinator
         canvas.drawing = library.drawing(for: pageID)
+        context.coordinator.suppressChanges = false
+        context.coordinator.loadedPage = pageID
+        context.coordinator.loadedRevision = revision
         configure(canvas)
         return canvas
     }
 
     func updateUIView(_ canvas: PKCanvasView, context: Context) {
-        context.coordinator.parent = self
+        let coordinator = context.coordinator
+        coordinator.parent = self
+        if coordinator.loadedPage != pageID || coordinator.loadedRevision != revision {
+            coordinator.pendingSave?.cancel()
+            coordinator.suppressChanges = true
+            canvas.drawing = library.drawing(for: pageID)
+            coordinator.loadedPage = pageID
+            coordinator.loadedRevision = revision
+            coordinator.suppressChanges = false
+        }
         configure(canvas)
     }
 
     private func configure(_ canvas: PKCanvasView) {
+        canvas.isUserInteractionEnabled = isEnabled
         switch ink {
-        case .pen:
-            canvas.tool = PKInkingTool(.pen, color: color, width: strokeWidth)
-        case .pencil:
-            canvas.tool = PKInkingTool(.pencil, color: color, width: strokeWidth)
-        case .marker:
-            canvas.tool = PKInkingTool(.marker, color: color.withAlphaComponent(0.45), width: max(10, strokeWidth * 4))
-        case .eraser:
-            canvas.tool = PKEraserTool(.vector)
+        case .pen: canvas.tool = PKInkingTool(.pen, color: color, width: strokeWidth)
+        case .fountainPen: canvas.tool = PKInkingTool(.fountainPen, color: color, width: strokeWidth)
+        case .monoline: canvas.tool = PKInkingTool(.monoline, color: color, width: strokeWidth)
+        case .pencil: canvas.tool = PKInkingTool(.pencil, color: color, width: strokeWidth)
+        case .marker: canvas.tool = PKInkingTool(.marker, color: color, width: max(3, strokeWidth * 2))
+        case .watercolor: canvas.tool = PKInkingTool(.watercolor, color: color, width: max(4, strokeWidth * 2))
+        case .crayon: canvas.tool = PKInkingTool(.crayon, color: color, width: max(3, strokeWidth * 2))
+        case .eraser: canvas.tool = PKEraserTool(.vector)
         }
     }
 
     final class Coordinator: NSObject, PKCanvasViewDelegate {
         var parent: PenCanvas
-        private var pendingSave: DispatchWorkItem?
+        var pendingSave: DispatchWorkItem?
+        var suppressChanges = false
+        var loadedPage: UUID?
+        var loadedRevision = -1
         init(_ parent: PenCanvas) { self.parent = parent }
 
         func canvasViewDrawingDidChange(_ canvasView: PKCanvasView) {
+            guard !suppressChanges else { return }
             pendingSave?.cancel()
             let drawing = canvasView.drawing
             let page = parent.pageID

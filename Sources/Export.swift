@@ -32,52 +32,18 @@ enum PDFNotebookExporter {
 
     private static func render(page: NotebookPage, book: Notebook, store: NotebookLibrary, pageNumber: Int, bounds: CGRect) {
         guard let cg = UIGraphicsGetCurrentContext() else { return }
-        let mainColor: UIColor
-        switch page.paper {
-        case "Rose Lines", "Blush": mainColor = UIColor(red: 1, green: 0.94, blue: 0.94, alpha: 1)
-        case "Lilac": mainColor = UIColor(red: 0.96, green: 0.94, blue: 0.99, alpha: 1)
-        case "Vintage", "Cream Grid", "Daily Plan", "Checklist", "Cornell": mainColor = UIColor(red: 1, green: 0.966, blue: 0.916, alpha: 1)
-        case "Sage": mainColor = UIColor(red: 0.95, green: 0.97, blue: 0.93, alpha: 1)
-        case "Dark": mainColor = UIColor(red: 0.2, green: 0.22, blue: 0.26, alpha: 1)
-        default: mainColor = UIColor(red: 1, green: 0.992, blue: 0.97, alpha: 1)
+        // Экспортирует те же шаблоны, что пользователь видит на страницах iPad.
+        let paperRenderer = ImageRenderer(content: PaperBackground(style: page.paper, customHex: page.customPaperHex)
+            .frame(width: bounds.width, height: bounds.height))
+        paperRenderer.scale = 1
+        if let image = paperRenderer.uiImage {
+            image.draw(in: bounds)
+        } else {
+            UIColor(Color(hex: page.customPaperHex ?? PaperCatalog.find(page.paper)?.background ?? 0xFFFDF7)).setFill()
+            cg.fill(bounds)
         }
-        (page.customPaperHex.map { UIColor(Color(hex: $0)) } ?? mainColor).setFill(); cg.fill(bounds)
         if let background = page.backgroundFile, let image = store.photo(named: background) {
             image.draw(in: bounds)
-        }
-        if ["Lines", "Grid", "Rose Lines", "Cream Grid", "Cornell"].contains(page.paper) {
-            cg.setStrokeColor(UIColor(red: 0.72, green: 0.77, blue: 0.84, alpha: 0.36).cgColor)
-            cg.setLineWidth(0.7)
-            for y in stride(from: CGFloat(74), through: bounds.height - 40, by: 36) {
-                cg.move(to: CGPoint(x: 28, y: y)); cg.addLine(to: CGPoint(x: bounds.width - 28, y: y))
-            }
-            if ["Grid", "Cream Grid"].contains(page.paper) {
-                for x in stride(from: CGFloat(30), through: bounds.width - 28, by: 36) {
-                    cg.move(to: CGPoint(x: x, y: 25)); cg.addLine(to: CGPoint(x: x, y: bounds.height - 30))
-                }
-            }
-            cg.strokePath()
-        } else if page.paper == "Dots" {
-            cg.setFillColor(UIColor(red: 0.67, green: 0.65, blue: 0.72, alpha: 0.3).cgColor)
-            for y in stride(from: CGFloat(30), through: bounds.height - 20, by: 33) {
-                for x in stride(from: CGFloat(30), through: bounds.width - 20, by: 33) {
-                    cg.fillEllipse(in: CGRect(x: x, y: y, width: 2, height: 2))
-                }
-            }
-        }
-
-        let headerAttrs: [NSAttributedString.Key: Any] = [
-            .font: UIFont.italicSystemFont(ofSize: 22),
-            .foregroundColor: UIColor(red: 0.64, green: 0.40, blue: 0.51, alpha: 0.7)
-        ]
-        if page.backgroundFile == nil {
-            ("dear diary," as NSString).draw(at: CGPoint(x: 40, y: 30), withAttributes: headerAttrs)
-        }
-
-        let drawing = store.drawing(for: page.id)
-        if drawing.bounds.isNull == false {
-            let fitted = drawing.image(from: CGRect(origin: .zero, size: CGSize(width: bounds.width, height: bounds.height)), scale: 1.0)
-            fitted.draw(in: bounds)
         }
 
         for item in page.items {
@@ -89,7 +55,11 @@ enum PDFNotebookExporter {
             switch item.kind {
             case .sticker:
                 if let image = UIImage(named: "Sticker_\(item.value)") {
-                    image.draw(in: CGRect(x: -91, y: -91, width: 182, height: 182))
+                    if item.value.hasPrefix("Frame") {
+                        image.draw(in: CGRect(x: -375, y: -524, width: 750, height: 1048))
+                    } else {
+                        image.draw(in: CGRect(x: -91, y: -91, width: 182, height: 182))
+                    }
                 }
             case .customSticker:
                 if let image = store.photo(named: item.value) {
@@ -105,8 +75,9 @@ enum PDFNotebookExporter {
                 let paragraph = NSMutableParagraphStyle()
                 paragraph.alignment = textStyle.alignment == "left" ? .left : textStyle.alignment == "right" ? .right : .center
                 let fontSize = CGFloat(textStyle.fontSize) * bounds.width / 650
-                let textRect = CGRect(x: -bounds.width * 0.33, y: -105,
-                                      width: bounds.width * 0.66, height: 210)
+                let fieldFactor = CGFloat(item.textWidthFactor ?? 0.66)
+                let textRect = CGRect(x: -bounds.width * fieldFactor / 2, y: -105,
+                                      width: bounds.width * fieldFactor, height: 210)
                 if let background = textStyle.backgroundHex {
                     UIColor(Color(hex: background)).withAlphaComponent(0.90).setFill()
                     UIBezierPath(roundedRect: textRect.insetBy(dx: -10, dy: -5), cornerRadius: 10).fill()
@@ -120,6 +91,14 @@ enum PDFNotebookExporter {
                 (item.value as NSString).draw(in: textRect, withAttributes: attrs)
             }
             cg.restoreGState()
+        }
+
+        // PDF: рукописный слой поверх наклеек, как на экране iPad.
+        let drawing = store.drawing(for: page.id)
+        if !drawing.bounds.isNull {
+            let fitted = drawing.image(from: CGRect(origin: .zero,
+                size: CGSize(width: bounds.width, height: bounds.height)), scale: 1.0)
+            fitted.draw(in: bounds)
         }
 
         let footer: [NSAttributedString.Key: Any] = [

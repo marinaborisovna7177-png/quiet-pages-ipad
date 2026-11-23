@@ -81,7 +81,8 @@ private struct PagePreview: View {
                             Text(item.value).font(.system(size: 7))
                         }
                     }
-                    .frame(width: geo.size.width * 0.22, height: geo.size.width * 0.22)
+                    .frame(width: geo.size.width * (item.kind == .sticker && item.value.hasPrefix("Frame") ? 0.90 : 0.22),
+                           height: item.kind == .sticker && item.value.hasPrefix("Frame") ? geo.size.height * 0.93 : geo.size.width * 0.22)
                     .position(x: geo.size.width * item.x, y: geo.size.height * item.y)
                 }
             }
