@@ -41,6 +41,18 @@ jobs:
           test -s "$ASSET_DIR/Sticker_Mega_0001.imageset/art.png"
           test -s "$ASSET_DIR/Sticker_Mega_2000.imageset/art.png"
 
+      - name: Проверить комплект новых художественных материалов
+        shell: bash
+        run: |
+          set -euo pipefail
+          count_paper=$(find Resources/Assets.xcassets -maxdepth 1 -type d -name 'Paper_*_*.imageset' | wc -l | tr -d ' ')
+          count_covers=$(find Resources/Assets.xcassets -maxdepth 1 -type d -name 'Cover_Painted_*.imageset' | wc -l | tr -d ' ')
+          test "$count_paper" -eq 48 || { echo "::error::Нужно 48 нарисованных полей бумаги, найдено $count_paper"; exit 1; }
+          test "$count_covers" -eq 24 || { echo "::error::Нужно 24 новых обложки, найдено $count_covers"; exit 1; }
+          test -s Sources/PhotoStudio.swift
+          xcrun swiftc -frontend -parse Sources/*.swift
+          echo "✅ Стикеры, 48 художественных листов, 24 обложки и Swift-файлы проверены."
+
       - name: Собрать iPadOS приложение без подписи
         shell: bash
         run: |

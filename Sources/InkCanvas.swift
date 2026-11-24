@@ -54,6 +54,9 @@ struct PenCanvas: UIViewRepresentable {
         case .watercolor: canvas.tool = PKInkingTool(.watercolor, color: color, width: max(4, strokeWidth * 2))
         case .crayon: canvas.tool = PKInkingTool(.crayon, color: color, width: max(3, strokeWidth * 2))
         case .eraser: canvas.tool = PKEraserTool(.vector)
+        case .pixelEraser: canvas.tool = PKEraserTool(.bitmap)
+        case .lasso: canvas.tool = PKLassoTool()
+        case .decorative: canvas.tool = PKInkingTool(.pen, color: color, width: strokeWidth)
         }
     }
 

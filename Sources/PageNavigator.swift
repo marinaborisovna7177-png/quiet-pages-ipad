@@ -31,6 +31,18 @@ struct PageNavigator: View {
                                 Text("Страница \(index + 1)")
                                     .font(.system(size: 12, weight: .medium))
                                 Spacer(minLength: 4)
+                                Button {
+                                    library.shiftPage(book: book.id, page: page.id, delta: -1)
+                                    if currentPage == index { currentPage = max(0, index - 1) }
+                                    else if currentPage == index - 1 { currentPage += 1 }
+                                } label: { Image(systemName: "arrow.left") }
+                                    .disabled(index == 0)
+                                Button {
+                                    library.shiftPage(book: book.id, page: page.id, delta: 1)
+                                    if currentPage == index { currentPage = index + 1 }
+                                    else if currentPage == index + 1 { currentPage -= 1 }
+                                } label: { Image(systemName: "arrow.right") }
+                                    .disabled(index >= book.pages.count - 1)
                                 Button { duplicate(page.id); dismiss() } label: {
                                     Image(systemName: "plus.square.on.square")
                                         .foregroundStyle(AppPalette.rose)
@@ -58,7 +70,8 @@ private struct PagePreview: View {
     var body: some View {
         GeometryReader { geo in
             ZStack(alignment: .topLeading) {
-                PaperBackground(style: page.paper, customHex: page.customPaperHex)
+                PaperBackground(style: page.paper, customHex: page.customPaperHex,
+                                decorationOpacity: page.decorationOpacity ?? 1)
                 if let background = page.backgroundFile, let img = library.photo(named: background) {
                     Image(uiImage: img).resizable().scaledToFill()
                         .frame(width: geo.size.width, height: geo.size.height).clipped()
@@ -69,6 +82,7 @@ private struct PagePreview: View {
                         .resizable().scaledToFill().frame(width: geo.size.width, height: geo.size.height)
                 }
                 ForEach(page.items) { item in
+                    if !item.hidden {
                     Group {
                         switch item.kind {
                         case .sticker:
@@ -79,11 +93,15 @@ private struct PagePreview: View {
                             }
                         case .text:
                             Text(item.value).font(.system(size: 7))
+                        case .shape:
+                            Image(systemName: item.value == "circle" ? "circle" : item.value == "rectangle" ? "rectangle" : item.value == "arrow" ? "arrow.right" : "line.diagonal")
+                                .resizable().scaledToFit()
                         }
                     }
                     .frame(width: geo.size.width * (item.kind == .sticker && item.value.hasPrefix("Frame") ? 0.90 : 0.22),
                            height: item.kind == .sticker && item.value.hasPrefix("Frame") ? geo.size.height * 0.93 : geo.size.width * 0.22)
                     .position(x: geo.size.width * item.x, y: geo.size.height * item.y)
+                    }
                 }
             }
             .frame(width: geo.size.width, height: geo.size.height)

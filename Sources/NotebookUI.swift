@@ -1,5 +1,6 @@
 import SwiftUI
 import PhotosUI
+import UniformTypeIdentifiers
 
 extension Color {
     init(hex: UInt32) {
@@ -23,12 +24,27 @@ enum AppPalette {
 struct LibraryView: View {
     @EnvironmentObject private var library: NotebookLibrary
     @State private var showingCreator = false
+    @State private var showingBackupImporter = false
+    @State private var backupError: String?
     @State private var search = ""
+    @State private var activeFolder = "Все"
+    @AppStorage("qpLibraryShelfMode") private var shelfMode = true
+    @State private var showingFolderCreator = false
+    @State private var newFolderName = ""
+    @State private var toRename: UUID?
+    @State private var newNotebookTitle = ""
+    @AppStorage("qpCustomFolders") private var customFolders = "Личное|Творчество|Учёба|Работа|Волшебный мир"
+    private var folders: [String] {
+        Array(Set(customFolders.split(separator: "|").map(String.init) + library.notebooks.compactMap(\.folder))).sorted()
+    }
     @State private var toDelete: UUID?
     @State private var toChangeCover: UUID?
     private let columns = [GridItem(.adaptive(minimum: 180, maximum: 230), spacing: 23)]
     private var filteredNotebooks: [Notebook] {
-        library.notebooks.filter { search.isEmpty || $0.title.localizedCaseInsensitiveContains(search) }
+        library.notebooks.filter { book in
+            (search.isEmpty || book.title.localizedCaseInsensitiveContains(search)) &&
+            (activeFolder == "Все" || (activeFolder == "Избранное" && book.favorite == true) || book.folder == activeFolder)
+        }
     }
 
     var body: some View {
@@ -50,6 +66,12 @@ struct LibraryView: View {
                                 }
                             }
                             Spacer()
+                            Button { showingBackupImporter = true } label: {
+                                Label("Восстановить блокнот", systemImage: "square.and.arrow.down")
+                                    .font(.system(size: 11, weight: .semibold))
+                                    .padding(.horizontal, 12).padding(.vertical, 9)
+                                    .background(.white.opacity(0.7), in: Capsule())
+                            }.buttonStyle(.plain)
                             Text("100% OFFLINE")
                                 .font(.system(size: 9, weight: .semibold)).tracking(1.5)
                                 .padding(.horizontal, 13).padding(.vertical, 9)
@@ -71,7 +93,16 @@ struct LibraryView: View {
                                     .font(.system(size: 13)).foregroundStyle(AppPalette.muted)
                             }
                             Spacer(minLength: 0)
-                            Button { showingCreator = true } label: {
+                            HStack(spacing: 10) {
+                                Button {
+                                    library.createNotebook(title: "Быстрая заметка", cover: "Cream", paper: "Ivory", mood: "minimal")
+                                } label: {
+                                    Label("Быстрая заметка", systemImage: "square.and.pencil")
+                                        .font(.system(size: 12, weight: .medium))
+                                        .padding(.horizontal, 14).padding(.vertical, 15)
+                                        .background(.white.opacity(0.8), in: RoundedRectangle(cornerRadius: 14))
+                                }.buttonStyle(.plain)
+                                Button { showingCreator = true } label: {
                                 HStack(spacing: 10) {
                                     Image(systemName: "plus").font(.system(size: 12, weight: .semibold))
                                     Text("Новый блокнот").font(.system(size: 13, weight: .semibold))
@@ -79,7 +110,8 @@ struct LibraryView: View {
                                 .padding(.horizontal, 18).padding(.vertical, 15)
                                 .foregroundStyle(.white)
                                 .background(AppPalette.midnight, in: RoundedRectangle(cornerRadius: 14))
-                            }.buttonStyle(.plain)
+                                }.buttonStyle(.plain)
+                            }
                         }.padding(.vertical, 18)
                         HStack(spacing: 10) {
                             Image(systemName: "magnifyingglass").foregroundStyle(AppPalette.rose)
@@ -89,18 +121,54 @@ struct LibraryView: View {
                         .padding(.horizontal, 18).padding(.vertical, 15)
                         .background(.white.opacity(0.78), in: RoundedRectangle(cornerRadius: 15))
                         .overlay(RoundedRectangle(cornerRadius: 15).stroke(Color(hex: 0xE8DDD3), lineWidth: 1))
+                        ScrollView(.horizontal, showsIndicators: false) {
+                            HStack(spacing: 8) {
+                                ForEach(["Все", "Избранное"] + folders, id: \.self) { title in
+                                    Button { activeFolder = title } label: {
+                                        Label(title, systemImage: title == "Избранное" ? "heart.fill" : "folder")
+                                            .font(.system(size: 12, weight: .medium))
+                                            .padding(.horizontal, 11).padding(.vertical, 8)
+                                            .foregroundStyle(activeFolder == title ? .white : AppPalette.midnight)
+                                            .background(activeFolder == title ? AppPalette.rose : Color.white, in: Capsule())
+                                    }.buttonStyle(.plain)
+                                }
+                                Button { showingFolderCreator = true } label: {
+                                    Label("Новая папка", systemImage: "folder.badge.plus")
+                                        .font(.system(size: 12)).padding(8)
+                                }.buttonStyle(.plain)
+                            }
+                        }
                         HStack(alignment: .firstTextBaseline) {
                             Text("Мои коллекции").font(.system(size: 22, design: .serif))
                             Spacer()
+                            Button { shelfMode.toggle() } label: {
+                                Label(shelfMode ? "Сетка" : "Книжная полка",
+                                      systemImage: shelfMode ? "square.grid.2x2" : "books.vertical")
+                                    .font(.system(size: 12))
+                                    .padding(.horizontal, 12).padding(.vertical, 7)
+                                    .background(Color.white.opacity(0.85), in: Capsule())
+                            }.buttonStyle(.plain)
                             Text("\(filteredNotebooks.count) блокн.")
                                 .font(.system(size: 12)).foregroundStyle(AppPalette.muted)
                         }.foregroundStyle(AppPalette.midnight).padding(.top, 4)
-                        LazyVGrid(columns: columns, spacing: 24) {
+                        LazyVGrid(columns: shelfMode ? [GridItem(.adaptive(minimum: 145, maximum: 220), spacing: 22)] : columns,
+                                  spacing: shelfMode ? 40 : 24) {
                             ForEach(filteredNotebooks) { book in
                                 NavigationLink(value: book.id) {
                                     VStack(alignment: .leading, spacing: 10) {
                                         NotebookCover(book: book)
                                             .aspectRatio(0.77, contentMode: .fit)
+                                            .overlay(alignment: .bottom) {
+                                                if shelfMode {
+                                                    RoundedRectangle(cornerRadius: 5)
+                                                        .fill(LinearGradient(colors: [Color(hex: 0xC3A38A),
+                                                            Color(hex: 0xF2E0C8), Color(hex: 0x9F7F68)],
+                                                            startPoint: .top, endPoint: .bottom))
+                                                        .frame(height: 12)
+                                                        .offset(y: 18)
+                                                        .shadow(color: .black.opacity(0.10), radius: 4, y: 2)
+                                                }
+                                            }
                                         Text(book.title)
                                             .font(.system(size: 15, weight: .medium, design: .serif))
                                             .lineLimit(1).foregroundStyle(AppPalette.midnight)
@@ -110,6 +178,15 @@ struct LibraryView: View {
                                 }
                                 .buttonStyle(.plain)
                                 .contextMenu {
+                                    Button(book.favorite == true ? "Убрать из избранного" : "В избранное", systemImage: "heart") { library.toggleFavorite(book.id) }
+                                    Button("Переименовать", systemImage: "pencil") { newNotebookTitle = book.title; toRename = book.id }
+                                    Button("Дублировать блокнот", systemImage: "plus.square.on.square") { library.duplicateNotebook(book.id) }
+                                    Menu("Переместить в папку", systemImage: "folder") {
+                                        Button("Без папки") { library.setNotebookFolder(book.id, folder: nil) }
+                                        ForEach(folders, id: \.self) { folder in
+                                            Button(folder) { library.setNotebookFolder(book.id, folder: folder) }
+                                        }
+                                    }
                                     Button("Сменить обложку", systemImage: "paintpalette") { toChangeCover = book.id }
                                     Button("Удалить блокнот", role: .destructive) { toDelete = book.id }
                                 }
@@ -139,6 +216,34 @@ struct LibraryView: View {
             .navigationBarHidden(true)
             .navigationDestination(for: UUID.self) { id in NotebookEditor(bookID: id) }
             .sheet(isPresented: $showingCreator) { CreateNotebookSheet() }
+            .alert("Новая папка", isPresented: $showingFolderCreator) {
+                TextField("Название папки", text: $newFolderName)
+                Button("Создать") {
+                    let name = newFolderName.trimmingCharacters(in: .whitespacesAndNewlines)
+                    if !name.isEmpty && !folders.contains(name) {
+                        customFolders += "|" + name
+                        activeFolder = name
+                    }
+                    newFolderName = ""
+                }
+                Button("Отмена", role: .cancel) { newFolderName = "" }
+            }
+            .alert("Название блокнота", isPresented: Binding(get: { toRename != nil }, set: { if !$0 { toRename = nil } })) {
+                TextField("Название", text: $newNotebookTitle)
+                Button("Сохранить") { if let id = toRename { library.renameNotebook(id, title: newNotebookTitle) }; toRename = nil }
+                Button("Отмена", role: .cancel) { toRename = nil }
+            }
+                        .fileImporter(isPresented: $showingBackupImporter, allowedContentTypes: [.data]) { result in
+                do {
+                    let source = try result.get()
+                    let access = source.startAccessingSecurityScopedResource()
+                    defer { if access { source.stopAccessingSecurityScopedResource() } }
+                    try library.importNotebookBackup(from: source)
+                } catch { backupError = "Не удалось восстановить блокнот: \(error.localizedDescription)" }
+            }
+            .alert("Резервная копия", isPresented: Binding(get: { backupError != nil }, set: { if !$0 { backupError = nil } })) {
+                Button("Понятно", role: .cancel) { backupError = nil }
+            } message: { Text(backupError ?? "") }
             .sheet(isPresented: Binding(get: { toChangeCover != nil }, set: { if !$0 { toChangeCover = nil } })) {
                 if let id = toChangeCover { ChangeNotebookCoverSheet(bookID: id) }
             }
@@ -154,7 +259,10 @@ struct NotebookCover: View {
     let book: Notebook
     var body: some View {
         ZStack {
-            Image("Cover_\(book.cover)").resizable().scaledToFill()
+            Image("Cover_\(CoverCatalog.source(for: book.cover))").resizable().scaledToFill()
+                .overlay { if let tint = CoverCatalog.tint(for: book.cover) {
+                    Color(hex: tint).opacity(0.28).blendMode(.multiply).allowsHitTesting(false)
+                }}
             VStack(spacing: 12) {
                 Text("THE QUIET PAGES COLLECTION")
                     .font(.system(size: 7, weight: .medium)).tracking(2.1).opacity(0.70)
@@ -197,7 +305,7 @@ struct CoverSelectionGrid: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
             HStack {
-                Text("36 обложек • все бесплатно")
+                Text("\(CoverCatalog.all.count) обложки • все бесплатно")
                     .font(.system(size: 12, weight: .semibold)).foregroundStyle(AppPalette.rose)
                 Spacer()
                 Text("Без интернета").font(.system(size: 10)).foregroundStyle(AppPalette.muted)
@@ -221,8 +329,11 @@ struct CoverSelectionGrid: View {
                     ForEach(options) { item in
                         Button { selectedCover = item.id } label: {
                             VStack(spacing: 6) {
-                                Image("Cover_\(item.id)")
+                                Image("Cover_\(CoverCatalog.source(for: item.id))")
                                     .resizable().scaledToFill()
+                                    .overlay { if let tint = item.tintHex {
+                                        Color(hex: tint).opacity(0.28).blendMode(.multiply).allowsHitTesting(false)
+                                    }}
                                     .frame(height: 156).frame(maxWidth: .infinity).clipped()
                                     .clipShape(RoundedRectangle(cornerRadius: 10))
                                     .overlay(RoundedRectangle(cornerRadius: 10)
@@ -244,32 +355,118 @@ struct CoverSelectionGrid: View {
     }
 }
 
+// Guided offline journal creation. Every choice is changeable later.
+struct JournalMood: Identifiable {
+    let id: String
+    let title: String
+    let subtitle: String
+    let symbol: String
+    let cover: String
+    let paper: String
+    static let all: [JournalMood] = [
+        JournalMood(id: "romantic", title: "Нежная романтика", subtitle: "Пионы · атлас · розовый", symbol: "heart", cover: "Peony", paper: "Rose Frame"),
+        JournalMood(id: "pinterest", title: "Pinterest Journal", subtitle: "Фотографии · скотч · заметки", symbol: "photo.on.rectangle.angled", cover: "Postcard", paper: "Scrapbook Frame"),
+        JournalMood(id: "vintage", title: "Старинные письма", subtitle: "Книжные страницы · винтаж", symbol: "envelope", cover: "Vintage", paper: "Vintage"),
+        JournalMood(id: "kawaii", title: "Kawaii", subtitle: "Клубника · котики · банты", symbol: "sparkles", cover: "Strawberry", paper: "Pink Bows"),
+        JournalMood(id: "academia", title: "Dark Academia", subtitle: "Книги · чернила · история", symbol: "books.vertical", cover: "Night", paper: "Kraft Journal"),
+        JournalMood(id: "minimal", title: "Quiet Luxury", subtitle: "Лён · спокойные линии", symbol: "leaf", cover: "Linen", paper: "Fine Lines"),
+        JournalMood(id: "spring", title: "Весенний сад", subtitle: "Ботаника · цветы", symbol: "camera.macro", cover: "Blossom", paper: "Botanical Header"),
+        JournalMood(id: "winter", title: "Зимняя сказка", subtitle: "Морозные узоры · уют", symbol: "snowflake", cover: "Moonlight", paper: "Blue Frame"),
+        JournalMood(id: "work", title: "Учёба и работа", subtitle: "Конспекты · планы · задачи", symbol: "checkmark.square", cover: "Cream", paper: "Cornell"),
+        JournalMood(id: "summer", title: "Летние воспоминания", subtitle: "Цветы · солнце · море", symbol: "sun.max", cover: "Painted_Summer_01", paper: "Paper_Summer_01"),
+        JournalMood(id: "autumn", title: "Осенний уют", subtitle: "Листья · книги · кофе", symbol: "leaf.fill", cover: "Painted_Autumn_01", paper: "Paper_Autumn_01"),
+        JournalMood(id: "magic", title: "Волшебная школа", subtitle: "Совушки · письма · звёзды", symbol: "sparkles", cover: "Painted_Magic_01", paper: "Paper_Magic_01"),
+        JournalMood(id: "fantasy", title: "Сказочные истории", subtitle: "Луна · ночное небо · чудеса", symbol: "moon.stars", cover: "Painted_Magic_02", paper: "Paper_Magic_02"),
+        JournalMood(id: "springpainted", title: "Весенняя акварель", subtitle: "Нежные цветочные края", symbol: "camera.macro", cover: "Painted_Spring_01", paper: "Paper_Spring_01"),
+        JournalMood(id: "winterpainted", title: "Зимняя акварель", subtitle: "Иней и морозные поля", symbol: "snowflake", cover: "Painted_Winter_01", paper: "Paper_Winter_01"),
+        JournalMood(id: "vintagepainted", title: "Винтажные письма", subtitle: "Пергамент · марки · кружево", symbol: "envelope.open", cover: "Painted_Vintage_01", paper: "Paper_Vintage_01")
+    ]
+}
+
 struct CreateNotebookSheet: View {
     @EnvironmentObject private var library: NotebookLibrary
     @Environment(\.dismiss) private var dismiss
     @State private var title = "Мой красивый блокнот"
-    @State private var cover = "Rose"
+    @State private var cover = "Peony"
+    @State private var paper = "Rose Frame"
+    @State private var mood = "romantic"
+    @State private var chooseCover = false
+    @State private var choosePaper = false
     var body: some View {
         NavigationStack {
-            VStack(spacing: 18) {
-                VStack(alignment: .leading, spacing: 6) {
-                    Text("Название блокнота").font(.system(size: 13, weight: .medium))
-                    TextField("Например: Мои мечты", text: $title)
-                        .textFieldStyle(.roundedBorder)
+            ScrollView {
+                VStack(alignment: .leading, spacing: 18) {
+                    HStack(alignment: .top, spacing: 16) {
+                        NotebookCover(book: Notebook(title: title.isEmpty ? "Мой блокнот" : title, cover: cover))
+                            .frame(width: 142, height: 191)
+                        VStack(alignment: .leading, spacing: 8) {
+                            Text("ЭСТЕТИЧНАЯ МАСТЕРСКАЯ").font(.system(size: 9, weight: .semibold)).tracking(1.5)
+                            Text("Создай свою историю").font(.system(size: 25, design: .serif))
+                            Text("Выбирай готовый стиль, а затем смешивай любые материалы внутри блокнота.")
+                                .font(.system(size: 12)).foregroundStyle(AppPalette.muted)
+                        }
+                    }.padding(.bottom, 4)
+                    Text("Название").font(.system(size: 15, weight: .semibold))
+                    TextField("Название блокнота", text: $title).textFieldStyle(.roundedBorder)
+                    HStack { Text("1 · Стиль блокнота").font(.system(size: 18, design: .serif)); Spacer(); Text("\(JournalMood.all.count) настроений").font(.system(size: 11)).foregroundStyle(AppPalette.muted) }
+                    LazyVGrid(columns: [GridItem(.adaptive(minimum: 165), spacing: 10)], spacing: 10) {
+                        ForEach(JournalMood.all) { option in
+                            Button {
+                                mood = option.id; cover = option.cover; paper = option.paper
+                            } label: {
+                                HStack(alignment: .top, spacing: 9) {
+                                    Image(systemName: option.symbol).font(.system(size: 17)).frame(width: 25)
+                                    VStack(alignment: .leading, spacing: 4) {
+                                        Text(option.title).font(.system(size: 13, weight: .semibold))
+                                        Text(option.subtitle).font(.system(size: 10)).foregroundStyle(AppPalette.muted)
+                                    }
+                                    Spacer(minLength: 0)
+                                    if mood == option.id { Image(systemName: "checkmark.circle.fill").foregroundStyle(AppPalette.rose) }
+                                }
+                                .foregroundStyle(AppPalette.midnight).padding(12)
+                                .background(.white, in: RoundedRectangle(cornerRadius: 13))
+                                .overlay(RoundedRectangle(cornerRadius: 13).stroke(mood == option.id ? AppPalette.rose : Color(hex: 0xE6D9D1), lineWidth: mood == option.id ? 2 : 1))
+                            }.buttonStyle(.plain)
+                        }
+                    }
+                    Text("2 · Обложка и бумага").font(.system(size: 18, design: .serif))
+                    HStack(spacing: 12) {
+                        Button { chooseCover = true } label: {
+                            Label("Обложки · \(CoverCatalog.all.count)", systemImage: "book.closed").frame(maxWidth: .infinity)
+                        }.buttonStyle(.bordered)
+                        Button { choosePaper = true } label: {
+                            Label("Бумага · \(PaperCatalog.all.count)", systemImage: "square.stack").frame(maxWidth: .infinity)
+                        }.buttonStyle(.bordered)
+                    }
+                    Text("Все материалы доступны бесплатно и без интернета. Оформление каждой страницы можно менять отдельно.")
+                        .font(.system(size: 11)).foregroundStyle(AppPalette.muted)
                 }
-                CoverSelectionGrid(selectedCover: $cover)
+                .padding(22)
             }
-            .padding(18)
             .background(AppPalette.parchment)
             .navigationTitle("Новый блокнот")
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) { Button("Отмена") { dismiss() } }
                 ToolbarItem(placement: .confirmationAction) {
-                    Button("Создать") { library.createNotebook(title: title, cover: cover); dismiss() }
+                    Button("Создать") { library.createNotebook(title: title, cover: cover, paper: paper, mood: mood); dismiss() }
                         .fontWeight(.semibold)
                 }
             }
-        }.presentationDetents([.large])
+        }
+        .presentationDetents([.large])
+        .sheet(isPresented: $chooseCover) {
+            NavigationStack {
+                CoverSelectionGrid(selectedCover: $cover).padding(18)
+                    .background(AppPalette.parchment)
+                    .navigationTitle("Выбрать обложку")
+                    .toolbar { ToolbarItem(placement: .confirmationAction) { Button("Готово") { chooseCover = false } } }
+            }.presentationDetents([.large])
+        }
+        .sheet(isPresented: $choosePaper) {
+            PaperPalette(current: paper, customHex: nil) { picked in
+                paper = picked; choosePaper = false
+            } chooseCustom: { _ in choosePaper = false }
+        }
     }
 }
 
@@ -303,7 +500,7 @@ struct StickerEntry: Identifiable {
 }
 
 enum StickerCatalog {
-    static let categories = ["Все", "Рамки", "Цветы", "Ленты", "Записки", "Уют", "Винтаж"] + MegaStickerCatalog.categories
+    static let categories = ["Все", "Рамки", "Цветы", "Ленты", "Записки", "Уют", "Винтаж"] + MegaStickerCatalog.categories + StudioCompositionCatalog.categories
     static let all: [StickerEntry] = [
         StickerEntry(id: "CozyKitten", title: "Котёнок", category: "Уют"),
         StickerEntry(id: "StrawberryCake", title: "Клубничный торт", category: "Уют"),
@@ -432,7 +629,7 @@ enum StickerCatalog {
         StickerEntry(id: "FrameBotanical6", title: "Botanical · Персик", category: "Рамки"),
         StickerEntry(id: "FrameBotanical7", title: "Botanical · Винтаж", category: "Рамки"),
         StickerEntry(id: "FrameBotanical8", title: "Botanical · Зефир", category: "Рамки"),
-    ] + MegaStickerCatalog.all
+    ] + MegaStickerCatalog.all + StudioCompositionCatalog.all
 }
 
 /// The 2,000-image catalog is generated from 20 collections × 100 stickers.
@@ -453,6 +650,31 @@ private enum MegaStickerCatalog {
                 title: "\(category) · \(localIndex)",
                 category: category
             )
+        }
+    }
+}
+
+// 1,000 transparent PNG collages compiled from our original offline art.
+// These are precomposed stickers, individually movable as one object.
+enum StudioCompositionCatalog {
+    static let categories = ["Бантики и цветы", "Акварельные букеты", "Кофе и книги",
+        "Романтические письма", "Сказочные ночи", "Сезонные коллажи", "Винтажный декор",
+        "Сладкие моменты", "Пастельные истории", "Готовые композиции"]
+    static func components(for name: String) -> (String, String)? {
+        guard name.hasPrefix("AtelierMix_"),
+              let n = Int(name.replacingOccurrences(of: "AtelierMix_", with: "")),
+              (1...1000).contains(n) else { return nil }
+        let group = (n - 1) / 100
+        let pos = (n - 1) % 100
+        let first = (group * 2) * 100 + ((pos * 13 + 7) % 100) + 1
+        let second = (group * 2 + 1) * 100 + ((pos * 17 + 23) % 100) + 1
+        return (String(format: "Mega_%04d", first), String(format: "Mega_%04d", second))
+    }
+    static let all: [StickerEntry] = categories.enumerated().flatMap { group, title in
+        (1...100).map { position in
+            let number = group * 100 + position
+            return StickerEntry(id: String(format: "AtelierMix_%04d", number),
+                                title: "\(title) · \(position)", category: title)
         }
     }
 }

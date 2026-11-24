@@ -15,7 +15,8 @@ struct PaperPreset: Identifiable {
 }
 
 enum PaperCatalog {
-    static let all: [PaperPreset] = [
+    static let all: [PaperPreset] = {
+        var values: [PaperPreset] = [
         PaperPreset("Ivory", "Слоновая кость", "Цветная", 0xFFFDF7, 0xBCB0AE, "blank"),
         PaperPreset("Lines", "Классическая линейка", "Для записей", 0xFFFDF7, 0xA7B8C2, "lines"),
         PaperPreset("Dots", "Точки", "Для записей", 0xFFFDF7, 0xBEA9B8, "dots"),
@@ -109,7 +110,48 @@ enum PaperCatalog {
         PaperPreset("Blue Frame", "Голубая рамка", "Эстетика", 0xF6FAFE, 0xA6BECE, "vintage"),
         PaperPreset("Pink Frame", "Розовая рамка", "Эстетика", 0xFFF8F8, 0xCEADB2, "vintage"),
         PaperPreset("Little Letters", "Маленькие письма", "Эстетика", 0xFAF4EB, 0xC4AE9D, "postcard"),
-    ]
-    static let categories = ["Все", "Для записей", "Цветная", "Узоры", "Цветы и винтаж", "Скрапбукинг", "Планеры", "Учёба", "Эстетика"]
+        ]
+        // Additional themed color-and-pattern editions. All saved IDs remain stable.
+        let moods: [(String, UInt32, UInt32)] = [
+            ("Романтика", 0xFFF1F5, 0xC99DAD),
+            ("Pinterest", 0xFFF7F0, 0xC5A5A4),
+            ("Винтаж", 0xF7EBDA, 0xB49B7E),
+            ("Kawaii", 0xFFF1F6, 0xD6A3C4),
+            ("Шалфей", 0xF1F6EE, 0x9DB69C),
+            ("Лаванда", 0xF6F1FF, 0xB6A3CC),
+            ("Кофейный", 0xFAEEE2, 0xBB947E),
+            ("Морской", 0xF1FAFD, 0x96B8C7),
+            ("Осенний", 0xFFF4E8, 0xBD9570),
+            ("Зимний", 0xF5F9FF, 0xA3B8D5),
+            ("Весенний", 0xF6FBEF, 0xA9BE8F),
+            ("Ночной", 0x343A4D, 0xADB5CC)
+        ]
+        let styles = ["blank", "lines", "dots", "grid", "gingham", "stripes", "flowers", "lace", "vintage", "washi", "polaroids", "weekly", "cornell"]
+        let names = ["Чистый", "Линейка", "Точки", "Клетка", "Клетчатый", "Полоски", "Цветы", "Кружево", "Рамка", "Скотч", "Фотостраница", "План недели", "Конспект"]
+        for (index, mood) in moods.enumerated() {
+            for (patternIndex, pattern) in styles.enumerated() where values.count < 240 {
+                values.append(PaperPreset("StudioPaper_\(index * styles.count + patternIndex + 1)",
+                    "\(mood.0) · \(names[patternIndex])", mood.0, mood.1, mood.2, pattern))
+            }
+        }
+        // 48 painted, raster-backed seasonal sheets. Decorations are only on the margins.
+        let painted: [(String, String, UInt32, UInt32)] = [
+            ("Winter", "Зима", 0xF7FAFD, 0x8DA7C2),
+            ("Spring", "Весна", 0xFFF9F6, 0xD5A5A9),
+            ("Summer", "Лето", 0xFFFCF5, 0xCEB577),
+            ("Autumn", "Осень", 0xFBF4EA, 0xAE7759),
+            ("Magic", "Волшебство", 0xF9F3E8, 0x9D7B56),
+            ("Vintage", "Винтажные письма", 0xF8F1E7, 0xA28571)
+        ]
+        for (key, category, background, ink) in painted {
+            for variation in 1...8 {
+                let title = "\(category) · акварель №\(variation)"
+                values.append(PaperPreset(String(format: "Paper_%@_%02d", key, variation),
+                                          title, category, background, ink, "painted"))
+            }
+        }
+        return values
+    }()
+    static let categories = ["Все", "Для записей", "Цветная", "Узоры", "Цветы и винтаж", "Скрапбукинг", "Планеры", "Учёба", "Эстетика", "Романтика", "Pinterest", "Винтаж", "Kawaii", "Шалфей", "Лаванда", "Кофейный", "Морской", "Осенний", "Зимний", "Весенний", "Ночной", "Зима", "Весна", "Лето", "Осень", "Волшебство", "Винтажные письма"]
     static func find(_ id: String) -> PaperPreset? { all.first(where: { $0.id == id }) }
 }

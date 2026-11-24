@@ -5,6 +5,7 @@
 	objectVersion = 56;
 	objects = {
 /* Begin PBXBuildFile section */
+		5DAFA030C1442001F2026112 /* PhotoStudio.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5DAFA030C1442002F2026112 /* PhotoStudio.swift */; };
 		ED21A9A8C653732F7502B5F4 /* QuietPagesApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = BF44E0DF03D9BE7A474131D8 /* QuietPagesApp.swift */; };
 		673F4805F285D9158FF6CEAF /* NotebookData.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1DE8BC9F210E0ACA1DA7FE9F /* NotebookData.swift */; };
 		14804DD147D0DBDC48825133 /* NotebookUI.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6FDEE7EC3CA4A20C30EB8CA9 /* NotebookUI.swift */; };
@@ -18,6 +19,7 @@
 		19AAB2BBBBBBBBBBBBBBBBBB /* CoverCatalog.swift in Sources */ = {isa = PBXBuildFile; fileRef = 19AAB2AAAAAAAAAAAAAAAAAA /* CoverCatalog.swift */; };
 /* End PBXBuildFile section */
 /* Begin PBXFileReference section */
+		5DAFA030C1442002F2026112 /* PhotoStudio.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PhotoStudio.swift; sourceTree = "<group>"; };
 		BF44E0DF03D9BE7A474131D8 /* QuietPagesApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = QuietPagesApp.swift; sourceTree = "<group>"; };
 		1DE8BC9F210E0ACA1DA7FE9F /* NotebookData.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NotebookData.swift; sourceTree = "<group>"; };
 		6FDEE7EC3CA4A20C30EB8CA9 /* NotebookUI.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NotebookUI.swift; sourceTree = "<group>"; };
@@ -37,6 +39,7 @@
 /* Begin PBXGroup section */
 		7E3C32BF75F587CD7E046B48 = {isa = PBXGroup; children = (1BD1E6ADD04558A76E080D70 /* Sources */, D7B93AA9D88B24D61ED9EB08 /* Resources */, 524D516C58BF5423637110DD /* Products */); sourceTree = "<group>"; };
 		1BD1E6ADD04558A76E080D70 /* Sources */ = {isa = PBXGroup; children = (
+			5DAFA030C1442002F2026112 /* PhotoStudio.swift */,
 			BF44E0DF03D9BE7A474131D8 /* QuietPagesApp.swift */,
 			1DE8BC9F210E0ACA1DA7FE9F /* NotebookData.swift */,
 			6FDEE7EC3CA4A20C30EB8CA9 /* NotebookUI.swift */,
@@ -85,6 +88,7 @@
 /* End PBXResourcesBuildPhase section */
 /* Begin PBXSourcesBuildPhase section */
 		06699AA0629BF43F3BAF9EEB = {isa = PBXSourcesBuildPhase; buildActionMask = 2147483647; files = (
+			5DAFA030C1442001F2026112 /* PhotoStudio.swift in Sources */,
 			ED21A9A8C653732F7502B5F4 /* QuietPagesApp.swift in Sources */,
 			673F4805F285D9158FF6CEAF /* NotebookData.swift in Sources */,
 			14804DD147D0DBDC48825133 /* NotebookUI.swift in Sources */,
@@ -100,8 +104,8 @@
 /* Begin XCBuildConfiguration section */
 		22FA92A9463469431A946998 /* Debug */ = {isa = XCBuildConfiguration; buildSettings = { ALWAYS_SEARCH_USER_PATHS = NO; CLANG_ENABLE_MODULES = YES; CLANG_ENABLE_OBJC_ARC = YES; CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER = YES; DEBUG_INFORMATION_FORMAT = dwarf; ENABLE_TESTABILITY = YES; GCC_OPTIMIZATION_LEVEL = 0; SDKROOT = iphoneos; SWIFT_ACTIVE_COMPILATION_CONDITIONS = DEBUG; SWIFT_OPTIMIZATION_LEVEL = "-Onone"; }; name = Debug; };
 		ABF4CEC36D7A4A60FC612056 /* Release */ = {isa = XCBuildConfiguration; buildSettings = { ALWAYS_SEARCH_USER_PATHS = NO; CLANG_ENABLE_MODULES = YES; CLANG_ENABLE_OBJC_ARC = YES; CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER = YES; DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym"; SDKROOT = iphoneos; SWIFT_COMPILATION_MODE = wholemodule; SWIFT_OPTIMIZATION_LEVEL = "-O"; }; name = Release; };
-		60BC0B5BE69D934CB94F4BEA /* Debug */ = {isa = XCBuildConfiguration; buildSettings = { ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon; CODE_SIGN_STYLE = Automatic; CURRENT_PROJECT_VERSION = 1; DEVELOPMENT_ASSET_PATHS = ""; GENERATE_INFOPLIST_FILE = NO; INFOPLIST_FILE = Resources/Info.plist; IPHONEOS_DEPLOYMENT_TARGET = 17.0; MARKETING_VERSION = 5.0; PRODUCT_BUNDLE_IDENTIFIER = com.salipaper.quietpages; PRODUCT_NAME = "$(TARGET_NAME)"; SWIFT_VERSION = 5.0; SUPPORTED_PLATFORMS = "iphoneos iphonesimulator"; TARGETED_DEVICE_FAMILY = 2; }; name = Debug; };
-		86EC7712C84257EED786EE2D /* Release */ = {isa = XCBuildConfiguration; buildSettings = { ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon; CODE_SIGN_STYLE = Automatic; CURRENT_PROJECT_VERSION = 1; DEVELOPMENT_ASSET_PATHS = ""; GENERATE_INFOPLIST_FILE = NO; INFOPLIST_FILE = Resources/Info.plist; IPHONEOS_DEPLOYMENT_TARGET = 17.0; MARKETING_VERSION = 5.0; PRODUCT_BUNDLE_IDENTIFIER = com.salipaper.quietpages; PRODUCT_NAME = "$(TARGET_NAME)"; SWIFT_VERSION = 5.0; SUPPORTED_PLATFORMS = "iphoneos iphonesimulator"; TARGETED_DEVICE_FAMILY = 2; }; name = Release; };
+		60BC0B5BE69D934CB94F4BEA /* Debug */ = {isa = XCBuildConfiguration; buildSettings = { ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon; CODE_SIGN_STYLE = Automatic; CURRENT_PROJECT_VERSION = 3; DEVELOPMENT_ASSET_PATHS = ""; GENERATE_INFOPLIST_FILE = NO; INFOPLIST_FILE = Resources/Info.plist; IPHONEOS_DEPLOYMENT_TARGET = 17.0; MARKETING_VERSION = 7.0; PRODUCT_BUNDLE_IDENTIFIER = com.salipaper.quietpages; PRODUCT_NAME = "$(TARGET_NAME)"; SWIFT_VERSION = 5.0; SUPPORTED_PLATFORMS = "iphoneos iphonesimulator"; TARGETED_DEVICE_FAMILY = 2; }; name = Debug; };
+		86EC7712C84257EED786EE2D /* Release */ = {isa = XCBuildConfiguration; buildSettings = { ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon; CODE_SIGN_STYLE = Automatic; CURRENT_PROJECT_VERSION = 3; DEVELOPMENT_ASSET_PATHS = ""; GENERATE_INFOPLIST_FILE = NO; INFOPLIST_FILE = Resources/Info.plist; IPHONEOS_DEPLOYMENT_TARGET = 17.0; MARKETING_VERSION = 7.0; PRODUCT_BUNDLE_IDENTIFIER = com.salipaper.quietpages; PRODUCT_NAME = "$(TARGET_NAME)"; SWIFT_VERSION = 5.0; SUPPORTED_PLATFORMS = "iphoneos iphonesimulator"; TARGETED_DEVICE_FAMILY = 2; }; name = Release; };
 /* End XCBuildConfiguration section */
 /* Begin XCConfigurationList section */
 		511CCCC4BCDB559CA81393C3 = {isa = XCConfigurationList; buildConfigurations = (22FA92A9463469431A946998, ABF4CEC36D7A4A60FC612056); defaultConfigurationIsVisible = 0; defaultConfigurationName = Release; };

@@ -4,10 +4,13 @@ struct CoverPreset: Identifiable {
     let id: String
     let title: String
     let category: String
+    var sourceCover: String? = nil
+    var tintHex: UInt32? = nil
 }
 
 enum CoverCatalog {
-    static let all: [CoverPreset] = [
+    static let all: [CoverPreset] = {
+        var values: [CoverPreset] = [
         CoverPreset(id: "Rose", title: "Розовая коллекция", category: "Романтика"),
         CoverPreset(id: "Sage", title: "Шалфей", category: "Природа"),
         CoverPreset(id: "Lavender", title: "Лавандовый", category: "Романтика"),
@@ -44,7 +47,39 @@ enum CoverCatalog {
         CoverPreset(id: "Moonlight", title: "Лунная ночь", category: "Винтаж"),
         CoverPreset(id: "Starlight", title: "Звёздная пыль", category: "Винтаж"),
         CoverPreset(id: "MidnightBlue", title: "Ночная синь", category: "Винтаж"),
-    ]
-    static let categories = ["Все", "Романтика", "Природа", "Минимализм", "Винтаж"]
+        ]
+        let bases = ["Rose", "Peony", "Strawberry", "Linen", "Vintage", "Night", "Autumn", "Sakura", "Coffee", "Seaside", "Marble", "Ribbon"]
+        let families = ["Нежная", "Цветочная", "Клубничная", "Льняная", "Старинная", "Ночная", "Осенняя", "Сакура", "Кофейная", "Морская", "Мраморная", "Атласная", "Зимняя сказка", "Весенний сад", "Летние мечты", "Осенний уют", "Волшебная академия", "Старинная библиотека"]
+        let shades: [(String, UInt32)] = [
+            ("Пудра", 0xF4CBD7), ("Персик", 0xEBC4B5), ("Лаванда", 0xD2C5ED),
+            ("Шалфей", 0xAFCCB2), ("Крем", 0xF0DEC2), ("Голубой", 0xB3D2E8),
+            ("Какао", 0x96705F), ("Роза", 0xDCA5BB), ("Серебро", 0xD9DDE5)
+        ]
+        for index in bases.indices {
+            for shade in shades.indices {
+                var design = CoverPreset(id: "StudioCover_\(index * shades.count + shade + 1)",
+                    title: "\(families[index]) · \(shades[shade].0)", category: families[index])
+                design.sourceCover = bases[index]
+                design.tintHex = shades[shade].1
+                values.append(design)
+            }
+        }
+        let coverThemes: [(String, String)] = [
+            ("Winter", "Зимняя сказка"), ("Spring", "Весенний сад"),
+            ("Summer", "Летние мечты"), ("Autumn", "Осенний уют"),
+            ("Magic", "Волшебная академия"), ("Vintage", "Старинная библиотека")
+        ]
+        for (key, title) in coverThemes {
+            for number in 1...4 {
+                let asset = String(format: "Painted_%@_%02d", key, number)
+                values.append(CoverPreset(id: asset, title: "\(title) · №\(number)", category: title))
+            }
+        }
+        return values
+    }()
+    static let categories = ["Все", "Романтика", "Природа", "Минимализм", "Винтаж", "Нежная", "Цветочная", "Клубничная", "Льняная", "Старинная", "Ночная", "Осенняя", "Сакура", "Кофейная", "Морская", "Мраморная", "Атласная", "Зимняя сказка", "Весенний сад", "Летние мечты", "Осенний уют", "Волшебная академия", "Старинная библиотека"]
     static func find(_ id: String) -> CoverPreset? { all.first(where: { $0.id == id }) }
+    static func source(for id: String) -> String { find(id)?.sourceCover ?? id }
+    static func tint(for id: String) -> UInt32? { find(id)?.tintHex }
+
 }

@@ -33,7 +33,8 @@ enum PDFNotebookExporter {
     private static func render(page: NotebookPage, book: Notebook, store: NotebookLibrary, pageNumber: Int, bounds: CGRect) {
         guard let cg = UIGraphicsGetCurrentContext() else { return }
         // Экспортирует те же шаблоны, что пользователь видит на страницах iPad.
-        let paperRenderer = ImageRenderer(content: PaperBackground(style: page.paper, customHex: page.customPaperHex)
+        let paperRenderer = ImageRenderer(content: PaperBackground(style: page.paper, customHex: page.customPaperHex,
+            decorationOpacity: page.decorationOpacity ?? 1)
             .frame(width: bounds.width, height: bounds.height))
         paperRenderer.scale = 1
         if let image = paperRenderer.uiImage {
@@ -46,12 +47,13 @@ enum PDFNotebookExporter {
             image.draw(in: bounds)
         }
 
-        for item in page.items {
+        for item in page.items where !item.hidden {
             let center = CGPoint(x: bounds.width * item.x, y: bounds.height * item.y)
             cg.saveGState()
             cg.translateBy(x: center.x, y: center.y)
             cg.rotate(by: item.angle * .pi / 180.0)
-            cg.scaleBy(x: item.scale, y: item.scale)
+            cg.scaleBy(x: item.scale * (item.flipped ? -1 : 1), y: item.scale)
+            cg.setAlpha(CGFloat(item.opacity))
             switch item.kind {
             case .sticker:
                 if let image = UIImage(named: "Sticker_\(item.value)") {
@@ -69,6 +71,19 @@ enum PDFNotebookExporter {
                 if let img = store.photo(named: item.value) {
                     UIColor.white.setFill(); cg.fill(CGRect(x: -149, y: -149, width: 298, height: 298))
                     img.draw(in: CGRect(x: -138, y: -138, width: 276, height: 276))
+                }
+            case .shape:
+                UIColor(Color(hex: item.textStyle?.colorHex ?? 0xA66D79)).setStroke()
+                cg.setLineWidth(4)
+                cg.setLineCap(.round)
+                switch item.value {
+                case "circle": cg.strokeEllipse(in: CGRect(x: -78, y: -78, width: 156, height: 156))
+                case "rectangle": cg.stroke(CGRect(x: -85, y: -75, width: 170, height: 150))
+                case "arrow":
+                    cg.move(to: CGPoint(x: -80, y: 0)); cg.addLine(to: CGPoint(x: 80, y: 0))
+                    cg.move(to: CGPoint(x: 52, y: -27)); cg.addLine(to: CGPoint(x: 80, y: 0)); cg.addLine(to: CGPoint(x: 52, y: 27)); cg.strokePath()
+                default:
+                    cg.move(to: CGPoint(x: -80, y: 0)); cg.addLine(to: CGPoint(x: 80, y: 0)); cg.strokePath()
                 }
             case .text:
                 let textStyle = item.textStyle ?? PageTextStyle()

@@ -8,6 +8,10 @@ struct Notebook: Identifiable, Codable, Equatable {
     var cover: String = "Rose"
     var created: Date = Date()
     var pages: [NotebookPage] = [NotebookPage()]
+    var mood: String? = nil
+    // Optional for backwards compatibility with notebooks saved before STUDIO 5.
+    var favorite: Bool? = nil
+    var folder: String? = nil
 }
 
 struct NotebookPage: Identifiable, Codable, Equatable {
@@ -15,6 +19,7 @@ struct NotebookPage: Identifiable, Codable, Equatable {
     var paper: String = "Ivory"
     var backgroundFile: String? = nil
     var customPaperHex: UInt32? = nil
+    var decorationOpacity: Double? = nil
     var items: [PageItem] = []
 }
 
@@ -30,7 +35,7 @@ struct PageTextStyle: Codable, Equatable {
 }
 
 struct PageItem: Identifiable, Codable, Equatable {
-    enum Kind: String, Codable { case sticker, text, photo, customSticker }
+    enum Kind: String, Codable { case sticker, text, photo, customSticker, shape }
     var id: UUID = UUID()
     var kind: Kind
     var value: String
@@ -43,11 +48,62 @@ struct PageItem: Identifiable, Codable, Equatable {
     var attachedStickerID: UUID? = nil
     // Для записей прямо на маленьких стикерах текстовое поле уже обычного.
     var textWidthFactor: Double? = nil
+    var opacity: Double = 1.0
+    var locked: Bool = false
+    var flipped: Bool = false
+    var groupID: UUID? = nil
+    var hidden: Bool = false
+
+    // Earlier saved notebooks did not have these settings; decode safely.
+    private enum CodingKeys: String, CodingKey {
+        case id, kind, value, x, y, scale, angle, textStyle, attachedStickerID, textWidthFactor, opacity, locked, flipped, groupID, hidden
+    }
+    init(id: UUID = UUID(), kind: Kind, value: String, x: Double = 0.5, y: Double = 0.5,
+         scale: Double = 1.0, angle: Double = 0, textStyle: PageTextStyle? = nil,
+         attachedStickerID: UUID? = nil, textWidthFactor: Double? = nil,
+         opacity: Double = 1.0, locked: Bool = false, flipped: Bool = false, groupID: UUID? = nil, hidden: Bool = false) {
+        self.id = id; self.kind = kind; self.value = value; self.x = x; self.y = y
+        self.scale = scale; self.angle = angle; self.textStyle = textStyle
+        self.attachedStickerID = attachedStickerID; self.textWidthFactor = textWidthFactor
+        self.opacity = opacity; self.locked = locked; self.flipped = flipped; self.groupID = groupID; self.hidden = hidden
+    }
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        id = try c.decodeIfPresent(UUID.self, forKey: .id) ?? UUID()
+        kind = try c.decode(Kind.self, forKey: .kind)
+        value = try c.decode(String.self, forKey: .value)
+        x = try c.decodeIfPresent(Double.self, forKey: .x) ?? 0.5
+        y = try c.decodeIfPresent(Double.self, forKey: .y) ?? 0.5
+        scale = try c.decodeIfPresent(Double.self, forKey: .scale) ?? 1
+        angle = try c.decodeIfPresent(Double.self, forKey: .angle) ?? 0
+        textStyle = try c.decodeIfPresent(PageTextStyle.self, forKey: .textStyle)
+        attachedStickerID = try c.decodeIfPresent(UUID.self, forKey: .attachedStickerID)
+        textWidthFactor = try c.decodeIfPresent(Double.self, forKey: .textWidthFactor)
+        opacity = try c.decodeIfPresent(Double.self, forKey: .opacity) ?? 1
+        locked = try c.decodeIfPresent(Bool.self, forKey: .locked) ?? false
+        flipped = try c.decodeIfPresent(Bool.self, forKey: .flipped) ?? false
+        groupID = try c.decodeIfPresent(UUID.self, forKey: .groupID)
+        hidden = try c.decodeIfPresent(Bool.self, forKey: .hidden) ?? false
+    }
+}
+
+struct UserComposition: Codable, Identifiable {
+    var id: UUID = UUID()
+    var title: String
+    var items: [PageItem]
+}
+
+// Portable offline backup: notebook metadata, attached pictures, and PencilKit drawings.
+struct QuietPagesBackup: Codable {
+    let formatVersion: Int
+    let notebook: Notebook
+    let files: [String: Data]
 }
 
 @MainActor
 final class NotebookLibrary: ObservableObject {
     @Published private(set) var notebooks: [Notebook] = []
+    @Published private(set) var userCompositions: [UserComposition] = []
     private let manager = FileManager.default
     private let directory: URL
     private struct PageRevision {
@@ -61,6 +117,7 @@ final class NotebookLibrary: ObservableObject {
     @Published private(set) var inkRevision = 0
     private var lastInkEdit: [UUID: Date] = [:]
     private var jsonFile: URL { directory.appendingPathComponent("notebooks.json") }
+    private var compositionFile: URL { directory.appendingPathComponent("compositions.json") }
 
     init() {
         let base = manager.urls(for: .applicationSupportDirectory, in: .userDomainMask).first!
@@ -70,8 +127,15 @@ final class NotebookLibrary: ObservableObject {
            let saved = try? JSONDecoder().decode([Notebook].self, from: data) {
             notebooks = saved
         } else {
-            notebooks = [Notebook(title: "Мои тихие страницы", cover: "Rose", pages: [NotebookPage(), NotebookPage(paper: "Dots")])]
+            notebooks = [Notebook(title: "Моя сказочная тетрадь", cover: "Painted_Spring_01",
+                                  pages: [NotebookPage(paper: "Paper_Spring_01"),
+                                          NotebookPage(paper: "Paper_Winter_01"),
+                                          NotebookPage(paper: "Paper_Magic_01")])]
             save()
+        }
+        if let data = try? Data(contentsOf: compositionFile),
+           let saved = try? JSONDecoder().decode([UserComposition].self, from: data) {
+            userCompositions = saved
         }
     }
 
@@ -131,9 +195,10 @@ final class NotebookLibrary: ObservableObject {
         inkRevision += 1
     }
 
-    func createNotebook(title: String, cover: String) {
+    func createNotebook(title: String, cover: String, paper: String = "Ivory", mood: String? = nil) {
         let title = title.trimmingCharacters(in: .whitespacesAndNewlines)
-        notebooks.insert(Notebook(title: title.isEmpty ? "Новый блокнот" : title, cover: cover), at: 0)
+        notebooks.insert(Notebook(title: title.isEmpty ? "Новый блокнот" : title, cover: cover,
+                                  pages: [NotebookPage(paper: paper)], mood: mood), at: 0)
         save()
     }
 
@@ -143,12 +208,112 @@ final class NotebookLibrary: ObservableObject {
         save()
     }
 
+    func saveComposition(name: String, items: [PageItem]) {
+        let title = name.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !title.isEmpty, !items.isEmpty else { return }
+        let preserved = items.map { original -> PageItem in
+            var item = original
+            if item.kind == .photo || item.kind == .customSticker {
+                item.value = copyLocalFile(named: item.value) ?? item.value
+            }
+            return item
+        }
+        userCompositions.insert(UserComposition(title: title, items: preserved), at: 0)
+        if let data = try? JSONEncoder().encode(userCompositions) {
+            try? data.write(to: compositionFile, options: .atomic)
+        }
+    }
+
+    func addSavedComposition(_ id: UUID, book: UUID, page: UUID) {
+        guard let composition = userCompositions.first(where: { $0.id == id }),
+              !composition.items.isEmpty else { return }
+        let ids = Dictionary(uniqueKeysWithValues: composition.items.map { ($0.id, UUID()) })
+        let group = UUID()
+        let xMin = composition.items.map(\.x).min() ?? 0.25
+        let xMax = composition.items.map(\.x).max() ?? 0.75
+        let yMin = composition.items.map(\.y).min() ?? 0.25
+        let yMax = composition.items.map(\.y).max() ?? 0.75
+        let centerX = (xMin + xMax) / 2, centerY = (yMin + yMax) / 2
+        let pasted = composition.items.map { old -> PageItem in
+            var copy = old
+            copy.id = ids[old.id] ?? UUID()
+            copy.groupID = group
+            copy.x = min(max(0.5 + old.x - centerX, 0.04), 0.96)
+            copy.y = min(max(0.5 + old.y - centerY, 0.04), 0.96)
+            copy.locked = false
+            if copy.kind == .photo || copy.kind == .customSticker {
+                copy.value = copyLocalFile(named: old.value) ?? old.value
+            }
+            if let linked = old.attachedStickerID { copy.attachedStickerID = ids[linked] }
+            return copy
+        }
+        addItems(book: book, page: page, items: pasted)
+    }
+
+    func toggleFavorite(_ id: UUID) {
+        guard let index = notebooks.firstIndex(where: { $0.id == id }) else { return }
+        notebooks[index].favorite = !(notebooks[index].favorite ?? false)
+        save()
+    }
+
+    func setNotebookFolder(_ id: UUID, folder: String?) {
+        guard let index = notebooks.firstIndex(where: { $0.id == id }) else { return }
+        notebooks[index].folder = folder
+        save()
+    }
+
+    func renameNotebook(_ id: UUID, title: String) {
+        guard let index = notebooks.firstIndex(where: { $0.id == id }),
+              !title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return }
+        notebooks[index].title = title
+        save()
+    }
+
+    func duplicateNotebook(_ id: UUID) {
+        guard let original = notebook(id) else { return }
+        var copy = original
+        copy.id = UUID()
+        copy.title = original.title + " · копия"
+        copy.favorite = false
+        copy.created = Date()
+        for i in copy.pages.indices {
+            let originalPage = copy.pages[i].id
+            copy.pages[i].id = UUID()
+            if let data = try? Data(contentsOf: inkURL(originalPage)) {
+                try? data.write(to: inkURL(copy.pages[i].id), options: .atomic)
+            }
+            if let bg = copy.pages[i].backgroundFile {
+                copy.pages[i].backgroundFile = copyLocalFile(named: bg)
+            }
+            let idMap = Dictionary(uniqueKeysWithValues: copy.pages[i].items.map { ($0.id, UUID()) })
+            for j in copy.pages[i].items.indices {
+                copy.pages[i].items[j].id = idMap[copy.pages[i].items[j].id] ?? UUID()
+                if let linked = copy.pages[i].items[j].attachedStickerID {
+                    copy.pages[i].items[j].attachedStickerID = idMap[linked]
+                }
+                if copy.pages[i].items[j].kind == .photo || copy.pages[i].items[j].kind == .customSticker {
+                    copy.pages[i].items[j].value = copyLocalFile(named: copy.pages[i].items[j].value) ?? ""
+                }
+            }
+        }
+        notebooks.insert(copy, at: 0)
+        save()
+    }
+
+    func updateItemImage(book: UUID, page: UUID, item: UUID, filename: String) {
+        edit(book: book, page: page) { p in
+            if let index = p.items.firstIndex(where: { $0.id == item }) {
+                p.items[index].value = filename
+            }
+        }
+    }
+
     func deleteNotebook(_ id: UUID) {
         guard let book = notebooks.first(where: { $0.id == id }) else { return }
         for page in book.pages {
             try? manager.removeItem(at: inkURL(page.id))
             if let background = page.backgroundFile { try? manager.removeItem(at: directory.appendingPathComponent(background)) }
-            for item in page.items where item.kind == .photo || item.kind == .customSticker {
+            for item in page.items where item.kind == .photo {
                 try? manager.removeItem(at: directory.appendingPathComponent(item.value))
             }
         }
@@ -158,10 +323,78 @@ final class NotebookLibrary: ObservableObject {
 
     func notebook(_ id: UUID) -> Notebook? { notebooks.first { $0.id == id } }
 
+    func exportNotebookBackup(_ bookID: UUID) -> URL? {
+        guard let book = notebook(bookID) else { return nil }
+        var files: [String: Data] = [:]
+        for page in book.pages {
+            let inkName = "ink-\(page.id.uuidString).drawing"
+            if let ink = try? Data(contentsOf: inkURL(page.id)) { files[inkName] = ink }
+            if let background = page.backgroundFile,
+               let bytes = try? Data(contentsOf: directory.appendingPathComponent(background)) {
+                files[background] = bytes
+            }
+            for item in page.items where item.kind == .photo || item.kind == .customSticker {
+                if let bytes = try? Data(contentsOf: directory.appendingPathComponent(item.value)) {
+                    files[item.value] = bytes
+                }
+            }
+        }
+        let backup = QuietPagesBackup(formatVersion: 1, notebook: book, files: files)
+        guard let encoded = try? JSONEncoder().encode(backup) else { return nil }
+        let dest = manager.temporaryDirectory.appendingPathComponent("QuietPages-\(book.id.uuidString.prefix(8)).quietpages")
+        do { try encoded.write(to: dest, options: .atomic); return dest }
+        catch { return nil }
+    }
+
+    func importNotebookBackup(from url: URL) throws {
+        let data = try Data(contentsOf: url)
+        let backup = try JSONDecoder().decode(QuietPagesBackup.self, from: data)
+        guard backup.formatVersion == 1, backup.notebook.pages.count <= 1000 else {
+            throw NSError(domain: "QuietPages", code: 1, userInfo: [NSLocalizedDescriptionKey: "Неподдерживаемый файл резервной копии"])
+        }
+        var copy = backup.notebook
+        copy.id = UUID()
+        var remap: [String: String] = [:]
+        func importPicture(_ name: String?) -> String? {
+            guard let name, let bytes = backup.files[name] else { return nil }
+            if let existing = remap[name] { return existing }
+            // Never use untrusted archive paths directly in the app's private folder.
+            let ext = (name as NSString).pathExtension.lowercased()
+            guard ["png", "jpg", "jpeg"].contains(ext), bytes.count < 25_000_000 else { return nil }
+            let newName = UUID().uuidString + "." + ext
+            guard (try? bytes.write(to: directory.appendingPathComponent(newName), options: .atomic)) != nil else { return nil }
+            remap[name] = newName
+            return newName
+        }
+        for index in copy.pages.indices {
+            let oldPage = copy.pages[index].id
+            copy.pages[index].id = UUID()
+            if let strokes = backup.files["ink-\(oldPage.uuidString).drawing"] {
+                try? strokes.write(to: inkURL(copy.pages[index].id), options: .atomic)
+            }
+            copy.pages[index].backgroundFile = importPicture(copy.pages[index].backgroundFile)
+            for j in copy.pages[index].items.indices {
+                if copy.pages[index].items[j].kind == .photo || copy.pages[index].items[j].kind == .customSticker {
+                    copy.pages[index].items[j].value = importPicture(copy.pages[index].items[j].value) ?? ""
+                }
+            }
+            copy.pages[index].items.removeAll { ($0.kind == .photo || $0.kind == .customSticker) && $0.value.isEmpty }
+        }
+        notebooks.insert(copy, at: 0)
+        save()
+    }
+
+
     func setPaper(book: UUID, page: UUID, style: String) {
         edit(book: book, page: page) {
             $0.paper = style
             $0.customPaperHex = nil
+        }
+    }
+
+    func setDecorationOpacity(book: UUID, page: UUID, opacity: Double) {
+        edit(book: book, page: page) {
+            $0.decorationOpacity = min(max(opacity, 0.25), 1)
         }
     }
 
@@ -173,6 +406,15 @@ final class NotebookLibrary: ObservableObject {
         } else {
             notebooks[index].pages.append(new)
         }
+        save()
+    }
+
+    func shiftPage(book id: UUID, page: UUID, delta: Int) {
+        guard let index = notebooks.firstIndex(where: { $0.id == id }),
+              let from = notebooks[index].pages.firstIndex(where: { $0.id == page }) else { return }
+        let destination = from + delta
+        guard notebooks[index].pages.indices.contains(destination) else { return }
+        notebooks[index].pages.swapAt(from, destination)
         save()
     }
 
@@ -247,6 +489,7 @@ final class NotebookLibrary: ObservableObject {
             guard let old = p.items.first(where: { $0.id == item }) else { return }
             var copy = old
             copy.id = UUID()
+            copy.groupID = nil
             copy.x = min(0.92, old.x + 0.07)
             copy.y = min(0.93, old.y + 0.06)
             if old.kind == .photo || old.kind == .customSticker {
@@ -282,12 +525,23 @@ final class NotebookLibrary: ObservableObject {
         if let background = notebooks[index].pages[pageIndex].backgroundFile {
             try? manager.removeItem(at: directory.appendingPathComponent(background))
         }
-        for item in notebooks[index].pages[pageIndex].items where item.kind == .photo || item.kind == .customSticker {
+        for item in notebooks[index].pages[pageIndex].items where item.kind == .photo {
             try? manager.removeItem(at: directory.appendingPathComponent(item.value))
         }
         notebooks[index].pages.remove(at: pageIndex)
         try? manager.removeItem(at: inkURL(page))
         save()
+    }
+
+    func addItems(book: UUID, page: UUID, items: [PageItem]) {
+        edit(book: book, page: page) { $0.items.append(contentsOf: items) }
+    }
+
+    func ungroupItem(book: UUID, page: UUID, item: UUID) {
+        edit(book: book, page: page) { p in
+            guard let groupID = p.items.first(where: { $0.id == item })?.groupID else { return }
+            for i in p.items.indices where p.items[i].groupID == groupID { p.items[i].groupID = nil }
+        }
     }
 
     func addItem(book: UUID, page: UUID, item: PageItem) {
@@ -306,6 +560,34 @@ final class NotebookLibrary: ObservableObject {
             guard let index = p.items.firstIndex(where: { $0.id == item }) else { return }
             let element = p.items.remove(at: index)
             p.items.insert(element, at: 0)
+        }
+    }
+
+    func toggleItemLock(book: UUID, page: UUID, item: UUID) {
+        edit(book: book, page: page) { p in
+            guard let i = p.items.firstIndex(where: { $0.id == item }) else { return }
+            p.items[i].locked.toggle()
+        }
+    }
+
+    func toggleItemVisibility(book: UUID, page: UUID, item: UUID) {
+        edit(book: book, page: page) { p in
+            guard let i = p.items.firstIndex(where: { $0.id == item }) else { return }
+            p.items[i].hidden.toggle()
+        }
+    }
+
+    func toggleItemFlip(book: UUID, page: UUID, item: UUID) {
+        edit(book: book, page: page) { p in
+            guard let i = p.items.firstIndex(where: { $0.id == item }) else { return }
+            p.items[i].flipped.toggle()
+        }
+    }
+
+    func setItemOpacity(book: UUID, page: UUID, item: UUID, opacity: Double) {
+        edit(book: book, page: page) { p in
+            guard let i = p.items.firstIndex(where: { $0.id == item }) else { return }
+            p.items[i].opacity = min(max(opacity, 0.1), 1)
         }
     }
 
@@ -332,6 +614,12 @@ final class NotebookLibrary: ObservableObject {
                 let dy = y - p.items[i].y
                 p.items[i].x = min(max(x, 0.08), 0.92)
                 p.items[i].y = min(max(y, 0.07), 0.93)
+                if let groupID = p.items[i].groupID {
+                    for j in p.items.indices where j != i && p.items[j].groupID == groupID {
+                        p.items[j].x = min(max(p.items[j].x + dx, 0.03), 0.97)
+                        p.items[j].y = min(max(p.items[j].y + dy, 0.03), 0.97)
+                    }
+                }
                 let stickerID = p.items[i].id
                 for j in p.items.indices where p.items[j].attachedStickerID == stickerID {
                     p.items[j].x = min(max(p.items[j].x + dx, 0.03), 0.97)

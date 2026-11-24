@@ -1,0 +1,20 @@
+{
+  "version": "STUDIO 5.0 source edition",
+  "ios_minimum": "17.0",
+  "bundle_id": "com.salipaper.quietpages",
+  "included_mega_sticker_png": 2000,
+  "runtime_editable_compositions": 1000,
+  "new_real_painted_paper_png": 48,
+  "total_paper_variants": 288,
+  "new_art_cover_jpg": 24,
+  "total_cover_styles": 168,
+  "palette_families": 24,
+  "editable_text_fonts": "system installed fonts + user TTF/OTF import; not 120 bundled",
+  "verification": "Swift syntax parse, asset integrity, PBX syntax, local backup compatibility by source review; no macOS Xcode build or iPad smoke-test",
+  "incomplete_feature_notes": [
+    "complex automatic subject background extraction not implemented: only light uniform background removal",
+    "full photo retouch and smart-object segmentation not implemented",
+    "authentic Harry Potter franchise artwork and logos not included",
+    "no licensed third-party fonts are redistributed"
+  ]
+}

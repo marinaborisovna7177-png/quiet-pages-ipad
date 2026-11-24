@@ -70,6 +70,36 @@ final class OfflineFontLibrary: ObservableObject {
     }
 }
 
+struct ColorMood: Identifiable {
+    let id: Int
+    let title: String
+    let shades: [UInt32]
+}
+
+enum ColorMoodCatalog {
+    private static let names = ["Пудровая", "Клубничная", "Розовая", "Жемчужная", "Лавандовая", "Сиреневая",
+        "Винтажная", "Кофейная", "Шоколадная", "Золотистая", "Осенняя", "Терракота",
+        "Шалфейная", "Ботаническая", "Мятная", "Изумрудная", "Морская", "Небесная",
+        "Голубая", "Зимняя", "Ночная", "Академия", "Минимализм", "Радужная"]
+    private static let bases: [UInt32] = [0xD19AAE,0xDE7487,0xC77899,0xBBA7AA,0xB49BDA,0x957BAF,
+        0xA38A78,0x96775C,0x755044,0xC6A362,0xB67A48,0xC77961,
+        0x8EAB8F,0x648868,0x81BFAE,0x448A72,0x6CAAB4,0x8EB8D3,
+        0x6E9DBE,0xA1BDDF,0x455579,0x644A6E,0x9F9A97,0xB880B4]
+    static let all: [ColorMood] = names.enumerated().map { i, title in
+        let base = bases[i]
+        let red = Int((base >> 16) & 255), green = Int((base >> 8) & 255), blue = Int(base & 255)
+        let shades: [UInt32] = (0..<10).map { step in
+            let mix = Double(step) / 11.0
+            let channel = { (c: Int) -> UInt32 in
+                let result = Int(Double(c) * (0.38 + mix * 0.77) + 255 * max(0, 0.44 - mix * 0.63))
+                return UInt32(max(0, min(255, result)))
+            }
+            return (channel(red) << 16) | (channel(green) << 8) | channel(blue)
+        }
+        return ColorMood(id: i, title: title, shades: shades)
+    }
+}
+
 private enum StudioSwatches {
     static let colors: [UInt32] = [
         0x1E222B,0x3C3540,0x594852,0x746066,0x9D8A8B,0xFFFFFF,
@@ -108,7 +138,24 @@ struct TextStudioSheet: View {
     @State private var text: String
     @State private var style: PageTextStyle
     @State private var fontSearch = ""
+    @State private var selectedTextPalette = 0
     @State private var section = 0
+    @State private var newStyleName = "Мой стиль"
+    @AppStorage("qpSavedTextStyles") private var savedTextStylesJSON = ""
+    private var savedTextStyles: [String: PageTextStyle] {
+        guard let data = savedTextStylesJSON.data(using: .utf8) else { return [:] }
+        return (try? JSONDecoder().decode([String: PageTextStyle].self, from: data)) ?? [:]
+    }
+    private func saveCurrentTextStyle() {
+        let name = newStyleName.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !name.isEmpty else { return }
+        var styles = savedTextStyles
+        styles[name] = style
+        if let json = try? JSONEncoder().encode(styles),
+           let string = String(data: json, encoding: .utf8) {
+            savedTextStylesJSON = string
+        }
+    }
 
     init(existing: PageItem?, initialStyle: PageTextStyle? = nil,
          save: @escaping (String, PageTextStyle) -> Void) {
@@ -268,6 +315,25 @@ struct TextStudioSheet: View {
             }
             .padding(12).background(.white, in: RoundedRectangle(cornerRadius: 14))
             swatches { style.colorHex = $0 }
+            Text("24 палитры для оформления").font(.system(size: 16, design: .serif))
+            ScrollView(.horizontal, showsIndicators: false) {
+                HStack(spacing: 8) {
+                    ForEach(ColorMoodCatalog.all) { mood in
+                        Button(mood.title) { selectedTextPalette = mood.id }
+                            .font(.system(size: 11, weight: .medium))
+                            .padding(.horizontal, 12).padding(.vertical, 9)
+                            .foregroundStyle(selectedTextPalette == mood.id ? .white : AppPalette.midnight)
+                            .background(selectedTextPalette == mood.id ? AppPalette.rose : Color.white, in: Capsule())
+                    }
+                }
+            }
+            LazyVGrid(columns: [GridItem(.adaptive(minimum: 38), spacing: 8)], spacing: 10) {
+                ForEach(ColorMoodCatalog.all[selectedTextPalette].shades, id: \.self) { hex in
+                    Button { style.colorHex = hex } label: {
+                        Circle().fill(Color(hex: hex)).frame(width: 34, height: 34)
+                    }.buttonStyle(.plain)
+                }
+            }
             VStack(alignment: .leading, spacing: 8) {
                 HStack { Text("Прозрачность"); Spacer(); Text("\(Int(style.opacity * 100))%") }
                     .font(.system(size: 13))
@@ -325,6 +391,23 @@ struct TextStudioSheet: View {
                     presetButton("Современный") { style.fontName = existingFont("AvenirNext-DemiBold", otherwise: "HelveticaNeue"); style.colorHex = 0x2E4055; style.backgroundHex = nil; style.fontSize = 28 }
                 }
             }
+            VStack(alignment: .leading, spacing: 10) {
+                Text("Мои сохранённые стили").font(.system(size: 18, design: .serif))
+                HStack {
+                    TextField("Название стиля", text: $newStyleName).textFieldStyle(.roundedBorder)
+                    Button("Сохранить ♡") { saveCurrentTextStyle() }
+                        .buttonStyle(.borderedProminent).tint(AppPalette.rose)
+                }
+                ForEach(savedTextStyles.keys.sorted(), id: \.self) { name in
+                    Button {
+                        if let favorite = savedTextStyles[name] { style = favorite }
+                    } label: {
+                        HStack { Image(systemName: "heart.text.square"); Text(name); Spacer(); Image(systemName: "arrow.up.left") }
+                            .font(.system(size: 12)).padding(11)
+                            .background(Color.white, in: RoundedRectangle(cornerRadius: 10))
+                    }.buttonStyle(.plain)
+                }
+            }
         }.padding(.top, 17)
     }
 
@@ -356,6 +439,7 @@ struct TextStudioSheet: View {
 
 struct InkColorPalette: View {
     @Binding var color: Color
+    @State private var selectedMood = 0
     var body: some View {
         NavigationStack {
             ScrollView {
@@ -367,12 +451,32 @@ struct InkColorPalette: View {
                     ColorPicker("Смешать свой цвет", selection: $color, supportsOpacity: false)
                         .padding(17)
                         .background(.white, in: RoundedRectangle(cornerRadius: 15))
+                    Text("24 тематические палитры").font(.system(size: 18, design: .serif))
+                    ScrollView(.horizontal, showsIndicators: false) {
+                        HStack(spacing: 8) {
+                            ForEach(ColorMoodCatalog.all) { mood in
+                                Button(mood.title) { selectedMood = mood.id }
+                                    .font(.system(size: 12, weight: .medium))
+                                    .foregroundStyle(selectedMood == mood.id ? .white : AppPalette.midnight)
+                                    .padding(.horizontal, 12).padding(.vertical, 8)
+                                    .background(selectedMood == mood.id ? AppPalette.rose : Color.white, in: Capsule())
+                            }
+                        }
+                    }
                     LazyVGrid(columns: [GridItem(.adaptive(minimum: 48), spacing: 12)], spacing: 14) {
-                        ForEach(StudioSwatches.colors, id: \.self) { hex in
+                        ForEach(ColorMoodCatalog.all[selectedMood].shades, id: \.self) { hex in
                             Button { color = Color(hex: hex) } label: {
                                 Circle().fill(Color(hex: hex))
                                     .frame(width: 40, height: 40)
                                     .overlay(Circle().stroke(Color(hex: 0xD3BEBB), lineWidth: 1))
+                            }.buttonStyle(.plain)
+                        }
+                    }
+                    Text("Все базовые оттенки").font(.system(size: 17, design: .serif))
+                    LazyVGrid(columns: [GridItem(.adaptive(minimum: 48), spacing: 12)], spacing: 14) {
+                        ForEach(StudioSwatches.colors, id: \.self) { hex in
+                            Button { color = Color(hex: hex) } label: {
+                                Circle().fill(Color(hex: hex)).frame(width: 38, height: 38)
                             }.buttonStyle(.plain)
                         }
                     }
