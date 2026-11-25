@@ -1,6 +1,9 @@
 import Foundation
+import Combine
 import UIKit
 import PencilKit
+import ImageIO
+import UniformTypeIdentifiers
 
 struct Notebook: Identifiable, Codable, Equatable {
     var id: UUID = UUID()
@@ -21,6 +24,8 @@ struct NotebookPage: Identifiable, Codable, Equatable {
     var customPaperHex: UInt32? = nil
     var decorationOpacity: Double? = nil
     var items: [PageItem] = []
+    var inkCanvasWidth: Double? = nil
+    var inkCanvasHeight: Double? = nil
 }
 
 struct PageTextStyle: Codable, Equatable {
@@ -104,6 +109,8 @@ struct QuietPagesBackup: Codable {
 final class NotebookLibrary: ObservableObject {
     @Published private(set) var notebooks: [Notebook] = []
     @Published private(set) var userCompositions: [UserComposition] = []
+    @Published var storageError: String?
+    private var savingBlocked = false
     private let manager = FileManager.default
     private let directory: URL
     private struct PageRevision {
@@ -119,18 +126,24 @@ final class NotebookLibrary: ObservableObject {
     private var jsonFile: URL { directory.appendingPathComponent("notebooks.json") }
     private var compositionFile: URL { directory.appendingPathComponent("compositions.json") }
 
-    init() {
+    init(directory overrideDirectory: URL? = nil) {
         let base = manager.urls(for: .applicationSupportDirectory, in: .userDomainMask).first!
-        directory = base.appendingPathComponent("QuietPages", isDirectory: true)
+        directory = overrideDirectory ?? base.appendingPathComponent("QuietPages", isDirectory: true)
         try? manager.createDirectory(at: directory, withIntermediateDirectories: true, attributes: nil)
-        if let data = try? Data(contentsOf: jsonFile),
-           let saved = try? JSONDecoder().decode([Notebook].self, from: data) {
-            notebooks = saved
+        if manager.fileExists(atPath: jsonFile.path) {
+            do {
+                let data = try Data(contentsOf: jsonFile)
+                notebooks = try JSONDecoder().decode([Notebook].self, from: data)
+                let checkpoint = directory.appendingPathComponent("notebooks-before-studio6.json")
+                if !manager.fileExists(atPath: checkpoint.path) { try manager.copyItem(at: jsonFile, to: checkpoint) }
+            } catch {
+                // Never overwrite an unreadable library with a starter notebook.
+                savingBlocked = true
+                storageError = "Не удалось прочитать библиотеку. Исходные файлы сохранены без изменений. Восстановите данные из резервной копии или обратитесь за помощью. \(error.localizedDescription)"
+            }
         } else {
-            notebooks = [Notebook(title: "Моя сказочная тетрадь", cover: "Painted_Spring_01",
-                                  pages: [NotebookPage(paper: "Paper_Spring_01"),
-                                          NotebookPage(paper: "Paper_Winter_01"),
-                                          NotebookPage(paper: "Paper_Magic_01")])]
+            notebooks = [Notebook(title: "Мои тихие страницы", cover: "Painted_Spring_01",
+                                  pages: [NotebookPage(paper: "Studio6_Spring_blank")])]
             save()
         }
         if let data = try? Data(contentsOf: compositionFile),
@@ -140,8 +153,31 @@ final class NotebookLibrary: ObservableObject {
     }
 
     private func save() {
-        guard let json = try? JSONEncoder().encode(notebooks) else { return }
-        try? json.write(to: jsonFile, options: .atomic)
+        guard !savingBlocked else { return }
+        do {
+            let json = try JSONEncoder().encode(notebooks)
+            if let previous = try? Data(contentsOf: jsonFile),
+               (try? JSONDecoder().decode([Notebook].self, from: previous)) != nil {
+                try previous.write(to: directory.appendingPathComponent("notebooks-previous.json"), options: .atomic)
+            }
+            try json.write(to: jsonFile, options: .atomic)
+        } catch { storageError = "Не удалось сохранить блокноты: \(error.localizedDescription)" }
+    }
+
+    func setInkCanvasSize(_ size: CGSize, page: UUID) {
+        guard !savingBlocked,
+              let b = notebooks.firstIndex(where: { $0.pages.contains { $0.id == page } }),
+              let p = notebooks[b].pages.firstIndex(where: { $0.id == page }),
+              notebooks[b].pages[p].inkCanvasWidth == nil else { return }
+        notebooks[b].pages[p].inkCanvasWidth = Double(size.width)
+        notebooks[b].pages[p].inkCanvasHeight = Double(size.height)
+        save()
+    }
+
+    func inkCanvasSize(page: UUID) -> CGSize? {
+        guard let p = notebooks.flatMap(\.pages).first(where: { $0.id == page }),
+              let w = p.inkCanvasWidth, let h = p.inkCanvasHeight, w > 0, h > 0 else { return nil }
+        return CGSize(width: w, height: h)
     }
 
     private func snapshot(book: UUID, page: UUID) -> PageRevision? {
@@ -157,7 +193,12 @@ final class NotebookLibrary: ObservableObject {
         let grouped = forInk && now.timeIntervalSince(lastInkEdit[page] ?? .distantPast) < 0.6
         if !grouped {
             undoHistory[page, default: []].append(snap)
-            if undoHistory[page, default: []].count > 70 { undoHistory[page]?.removeFirst() }
+            if undoHistory[page, default: []].count > 30 { undoHistory[page]?.removeFirst() }
+            while undoHistory.values.flatMap({ $0 }).reduce(0, { $0 + ($1.ink?.count ?? 0) }) > 24 * 1024 * 1024 {
+                guard let key = undoHistory.keys.sorted(by: { $0.uuidString < $1.uuidString })
+                    .first(where: { !(undoHistory[$0] ?? []).isEmpty }) else { break }
+                undoHistory[key]?.removeFirst()
+            }
         }
         lastInkEdit[page] = now
         redoHistory[page] = []
@@ -347,43 +388,71 @@ final class NotebookLibrary: ObservableObject {
     }
 
     func importNotebookBackup(from url: URL) throws {
-        let data = try Data(contentsOf: url)
-        let backup = try JSONDecoder().decode(QuietPagesBackup.self, from: data)
-        guard backup.formatVersion == 1, backup.notebook.pages.count <= 1000 else {
-            throw NSError(domain: "QuietPages", code: 1, userInfo: [NSLocalizedDescriptionKey: "Неподдерживаемый файл резервной копии"])
+        func failure(_ message: String) -> NSError {
+            NSError(domain: "QuietPages.Backup", code: 1, userInfo: [NSLocalizedDescriptionKey: message])
+        }
+        guard !savingBlocked else { throw failure("Сначала восстановите исходную библиотеку: запись заблокирована, чтобы сохранить данные.") }
+        let size = try url.resourceValues(forKeys: [.fileSizeKey]).fileSize ?? 0
+        guard size <= 150_000_000 else { throw failure("Резервная копия больше 150 МБ. На этом iPad импорт такого файла пока не поддерживается.") }
+        let backup = try JSONDecoder().decode(QuietPagesBackup.self, from: Data(contentsOf: url))
+        guard backup.formatVersion == 1, !backup.notebook.pages.isEmpty,
+              backup.notebook.pages.count <= 1000,
+              Set(backup.notebook.pages.map(\.id)).count == backup.notebook.pages.count else {
+            throw failure("Неподдерживаемая или повреждённая резервная копия")
+        }
+        let staging = directory.appendingPathComponent("import-\(UUID().uuidString)", isDirectory: true)
+        try manager.createDirectory(at: staging, withIntermediateDirectories: true)
+        defer { try? manager.removeItem(at: staging) }
+        var remap: [String: String] = [:]
+        var staged: [String] = []
+        func importPicture(_ name: String?) throws -> String? {
+            guard let name else { return nil }
+            if let old = remap[name] { return old }
+            guard let bytes = backup.files[name], bytes.count < 25_000_000,
+                  UIImage(data: bytes) != nil else { throw failure("В копии отсутствует или повреждено изображение: \(name)") }
+            let ext = (name as NSString).pathExtension.lowercased()
+            guard ["png", "jpg", "jpeg"].contains(ext) else { throw failure("Неподдерживаемое изображение") }
+            let newName = UUID().uuidString + "." + ext
+            try bytes.write(to: staging.appendingPathComponent(newName), options: .atomic)
+            staged.append(newName); remap[name] = newName
+            return newName
         }
         var copy = backup.notebook
         copy.id = UUID()
-        var remap: [String: String] = [:]
-        func importPicture(_ name: String?) -> String? {
-            guard let name, let bytes = backup.files[name] else { return nil }
-            if let existing = remap[name] { return existing }
-            // Never use untrusted archive paths directly in the app's private folder.
-            let ext = (name as NSString).pathExtension.lowercased()
-            guard ["png", "jpg", "jpeg"].contains(ext), bytes.count < 25_000_000 else { return nil }
-            let newName = UUID().uuidString + "." + ext
-            guard (try? bytes.write(to: directory.appendingPathComponent(newName), options: .atomic)) != nil else { return nil }
-            remap[name] = newName
-            return newName
-        }
         for index in copy.pages.indices {
-            let oldPage = copy.pages[index].id
+            let old = copy.pages[index].id
             copy.pages[index].id = UUID()
-            if let strokes = backup.files["ink-\(oldPage.uuidString).drawing"] {
-                try? strokes.write(to: inkURL(copy.pages[index].id), options: .atomic)
+            if let strokes = backup.files["ink-\(old.uuidString).drawing"] {
+                _ = try PKDrawing(data: strokes)
+                let name = "ink-\(copy.pages[index].id.uuidString).drawing"
+                try strokes.write(to: staging.appendingPathComponent(name), options: .atomic)
+                staged.append(name)
             }
-            copy.pages[index].backgroundFile = importPicture(copy.pages[index].backgroundFile)
+            copy.pages[index].backgroundFile = try importPicture(copy.pages[index].backgroundFile)
+            guard Set(copy.pages[index].items.map(\.id)).count == copy.pages[index].items.count else {
+                throw failure("В копии повторяются идентификаторы объектов")
+            }
             for j in copy.pages[index].items.indices {
                 if copy.pages[index].items[j].kind == .photo || copy.pages[index].items[j].kind == .customSticker {
-                    copy.pages[index].items[j].value = importPicture(copy.pages[index].items[j].value) ?? ""
+                    copy.pages[index].items[j].value = try importPicture(copy.pages[index].items[j].value) ?? ""
                 }
             }
-            copy.pages[index].items.removeAll { ($0.kind == .photo || $0.kind == .customSticker) && $0.value.isEmpty }
         }
-        notebooks.insert(copy, at: 0)
-        save()
+        var moved: [String] = []
+        do {
+            for name in staged {
+                try manager.moveItem(at: staging.appendingPathComponent(name), to: directory.appendingPathComponent(name))
+                moved.append(name)
+            }
+            let updated = [copy] + notebooks
+            let json = try JSONEncoder().encode(updated)
+            try json.write(to: jsonFile, options: .atomic)
+            notebooks = updated
+        } catch {
+            for name in moved { try? manager.removeItem(at: directory.appendingPathComponent(name)) }
+            throw error
+        }
     }
-
 
     func setPaper(book: UUID, page: UUID, style: String) {
         edit(book: book, page: page) {
@@ -637,21 +706,34 @@ final class NotebookLibrary: ObservableObject {
     }
 
     func savePhoto(_ data: Data) -> String? {
-        guard let image = UIImage(data: data) else { return nil }
-        // Keep transparency: imported PNG stickers must not receive a white rectangle.
-        let hasAlpha = image.cgImage.map { cg -> Bool in
-            switch cg.alphaInfo {
-            case .first, .last, .premultipliedFirst, .premultipliedLast: return true
-            default: return false
-            }
-        } ?? false
-        guard let imageData = hasAlpha ? image.pngData() : image.jpegData(compressionQuality: 0.88) else { return nil }
-        let filename = UUID().uuidString + (hasAlpha ? ".png" : ".jpg")
-        do { try imageData.write(to: directory.appendingPathComponent(filename), options: .atomic); return filename }
-        catch { return nil }
+        // Preserve original bytes and alpha; validate with a small decode, not a full bitmap.
+        guard data.count <= 25 * 1024 * 1024,
+              let source = CGImageSourceCreateWithData(data as CFData,
+                  [kCGImageSourceShouldCache: false] as CFDictionary),
+              let type = CGImageSourceGetType(source),
+              let ext = UTType(type as String)?.preferredFilenameExtension,
+              CGImageSourceCreateThumbnailAtIndex(source, 0, [
+                  kCGImageSourceCreateThumbnailFromImageAlways: true,
+                  kCGImageSourceThumbnailMaxPixelSize: 64,
+                  kCGImageSourceShouldCacheImmediately: true
+              ] as CFDictionary) != nil else {
+            storageError = "Не удалось открыть изображение. Проверьте файл; максимальный размер — 25 МБ."
+            return nil
+        }
+        let filename = UUID().uuidString + "." + ext
+        do {
+            try data.write(to: directory.appendingPathComponent(filename), options: .atomic)
+            return filename
+        } catch {
+            storageError = "Не удалось сохранить изображение: \(error.localizedDescription)"
+            return nil
+        }
     }
 
-    func photo(named: String) -> UIImage? { UIImage(contentsOfFile: directory.appendingPathComponent(named).path) }
+    func photo(named: String, pixels: Int = 1536) -> UIImage? {
+        guard !named.contains("/"), !named.contains("..") else { return nil }
+        return StudioImageStore.local(directory.appendingPathComponent(named), pixels: pixels)
+    }
 
     private func edit(book: UUID, page: UUID, action: (inout NotebookPage) -> Void) {
         guard let b = notebooks.firstIndex(where: { $0.id == book }),
@@ -669,11 +751,13 @@ final class NotebookLibrary: ObservableObject {
     }
 
     func saveDrawing(_ drawing: PKDrawing, for page: UUID, recordHistory: Bool = true) {
+        guard !savingBlocked else { return }
         let bytes = drawing.dataRepresentation()
         if let old = try? Data(contentsOf: inkURL(page)), old == bytes { return }
         if recordHistory, let book = notebooks.first(where: { $0.pages.contains(where: { $0.id == page }) }) {
             noteUndo(book: book.id, page: page, forInk: true)
         }
-        try? bytes.write(to: inkURL(page), options: .atomic)
+        do { try bytes.write(to: inkURL(page), options: .atomic) }
+        catch { storageError = "Не удалось сохранить рисунок: \(error.localizedDescription)" }
     }
 }

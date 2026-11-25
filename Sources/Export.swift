@@ -16,112 +16,77 @@ struct ShareSheet: UIViewControllerRepresentable {
 
 @MainActor
 enum PDFNotebookExporter {
+    static let pageSize = CGSize(width: 700, height: 700 / 0.735)
+    static func image(page: NotebookPage, store: NotebookLibrary) throws -> UIImage {
+        let renderer = ImageRenderer(content: ExportPage(page: page, store: store).frame(width: pageSize.width, height: pageSize.height))
+        renderer.scale = 2
+        guard let image = renderer.uiImage else {
+            throw NSError(domain: "QuietPages.Export", code: 1, userInfo: [NSLocalizedDescriptionKey: "Не удалось подготовить изображение страницы"])
+        }
+        return image
+    }
     static func export(book: Notebook, store: NotebookLibrary) throws -> URL {
-        let bounds = CGRect(x: 0, y: 0, width: 816, height: 1118)
+        let bounds = CGRect(origin: .zero, size: pageSize)
+        let url = FileManager.default.temporaryDirectory.appendingPathComponent("QuietPages-\(UUID().uuidString).pdf")
         let renderer = UIGraphicsPDFRenderer(bounds: bounds)
-        let safeName = book.title.replacingOccurrences(of: "/", with: "-")
-        let url = FileManager.default.temporaryDirectory.appendingPathComponent("\(safeName)-\(UUID().uuidString.prefix(6)).pdf")
+        var renderError: Error?
         try renderer.writePDF(to: url) { context in
-            for (number, page) in book.pages.enumerated() {
-                context.beginPage()
-                render(page: page, book: book, store: store, pageNumber: number + 1, bounds: bounds)
+            for page in book.pages {
+                autoreleasepool {
+                    do {
+                        let image = try image(page: page, store: store)
+                        context.beginPage()
+                        image.draw(in: bounds)
+                    } catch { renderError = error }
+                }
+                if renderError != nil { break }
             }
+        }
+        if let renderError {
+            try? FileManager.default.removeItem(at: url)
+            throw renderError
         }
         return url
     }
-
-    private static func render(page: NotebookPage, book: Notebook, store: NotebookLibrary, pageNumber: Int, bounds: CGRect) {
-        guard let cg = UIGraphicsGetCurrentContext() else { return }
-        // Экспортирует те же шаблоны, что пользователь видит на страницах iPad.
-        let paperRenderer = ImageRenderer(content: PaperBackground(style: page.paper, customHex: page.customPaperHex,
-            decorationOpacity: page.decorationOpacity ?? 1)
-            .frame(width: bounds.width, height: bounds.height))
-        paperRenderer.scale = 1
-        if let image = paperRenderer.uiImage {
-            image.draw(in: bounds)
-        } else {
-            UIColor(Color(hex: page.customPaperHex ?? PaperCatalog.find(page.paper)?.background ?? 0xFFFDF7)).setFill()
-            cg.fill(bounds)
+    static func exportPNG(page: NotebookPage, store: NotebookLibrary) throws -> URL {
+        let output = try image(page: page, store: store)
+        guard let data = output.pngData() else {
+            throw NSError(domain: "QuietPages.Export", code: 2, userInfo: [NSLocalizedDescriptionKey: "Ошибка PNG"])
         }
-        if let background = page.backgroundFile, let image = store.photo(named: background) {
-            image.draw(in: bounds)
-        }
+        let url = FileManager.default.temporaryDirectory.appendingPathComponent("QuietPages-\(UUID().uuidString).png")
+        try data.write(to: url, options: .atomic)
+        return url
+    }
+}
 
-        for item in page.items where !item.hidden {
-            let center = CGPoint(x: bounds.width * item.x, y: bounds.height * item.y)
-            cg.saveGState()
-            cg.translateBy(x: center.x, y: center.y)
-            cg.rotate(by: item.angle * .pi / 180.0)
-            cg.scaleBy(x: item.scale * (item.flipped ? -1 : 1), y: item.scale)
-            cg.setAlpha(CGFloat(item.opacity))
-            switch item.kind {
-            case .sticker:
-                if let image = UIImage(named: "Sticker_\(item.value)") {
-                    if item.value.hasPrefix("Frame") {
-                        image.draw(in: CGRect(x: -375, y: -524, width: 750, height: 1048))
-                    } else {
-                        image.draw(in: CGRect(x: -91, y: -91, width: 182, height: 182))
-                    }
-                }
-            case .customSticker:
-                if let image = store.photo(named: item.value) {
-                    image.draw(in: CGRect(x: -105, y: -105, width: 210, height: 210))
-                }
-            case .photo:
-                if let img = store.photo(named: item.value) {
-                    UIColor.white.setFill(); cg.fill(CGRect(x: -149, y: -149, width: 298, height: 298))
-                    img.draw(in: CGRect(x: -138, y: -138, width: 276, height: 276))
-                }
-            case .shape:
-                UIColor(Color(hex: item.textStyle?.colorHex ?? 0xA66D79)).setStroke()
-                cg.setLineWidth(4)
-                cg.setLineCap(.round)
-                switch item.value {
-                case "circle": cg.strokeEllipse(in: CGRect(x: -78, y: -78, width: 156, height: 156))
-                case "rectangle": cg.stroke(CGRect(x: -85, y: -75, width: 170, height: 150))
-                case "arrow":
-                    cg.move(to: CGPoint(x: -80, y: 0)); cg.addLine(to: CGPoint(x: 80, y: 0))
-                    cg.move(to: CGPoint(x: 52, y: -27)); cg.addLine(to: CGPoint(x: 80, y: 0)); cg.addLine(to: CGPoint(x: 52, y: 27)); cg.strokePath()
-                default:
-                    cg.move(to: CGPoint(x: -80, y: 0)); cg.addLine(to: CGPoint(x: 80, y: 0)); cg.strokePath()
-                }
-            case .text:
-                let textStyle = item.textStyle ?? PageTextStyle()
-                let paragraph = NSMutableParagraphStyle()
-                paragraph.alignment = textStyle.alignment == "left" ? .left : textStyle.alignment == "right" ? .right : .center
-                let fontSize = CGFloat(textStyle.fontSize) * bounds.width / 650
-                let fieldFactor = CGFloat(item.textWidthFactor ?? 0.66)
-                let textRect = CGRect(x: -bounds.width * fieldFactor / 2, y: -105,
-                                      width: bounds.width * fieldFactor, height: 210)
-                if let background = textStyle.backgroundHex {
-                    UIColor(Color(hex: background)).withAlphaComponent(0.90).setFill()
-                    UIBezierPath(roundedRect: textRect.insetBy(dx: -10, dy: -5), cornerRadius: 10).fill()
-                }
-                let attrs: [NSAttributedString.Key: Any] = [
-                    .font: UIFont(name: textStyle.fontName, size: fontSize) ?? UIFont.systemFont(ofSize: fontSize),
-                    .foregroundColor: UIColor(Color(hex: textStyle.colorHex)).withAlphaComponent(CGFloat(textStyle.opacity)),
-                    .paragraphStyle: paragraph,
-                    .kern: textStyle.letterSpacing * bounds.width / 650
-                ]
-                (item.value as NSString).draw(in: textRect, withAttributes: attrs)
+private struct ExportPage: View {
+    let page: NotebookPage
+    let store: NotebookLibrary
+    private let size = PDFNotebookExporter.pageSize
+    var body: some View {
+        ZStack(alignment: .topLeading) {
+            PaperBackground(style: page.paper, customHex: page.customPaperHex,
+                            decorationOpacity: page.decorationOpacity ?? 1)
+                .overlay { Image("PaperGrain").resizable().scaledToFill().opacity(0.48) }
+            if let file = page.backgroundFile, let image = store.photo(named: file) {
+                Image(uiImage: image).resizable().scaledToFill().frame(width: size.width, height: size.height).clipped()
             }
-            cg.restoreGState()
+            ForEach(page.items.filter { !$0.hidden }) { item in
+                PageObjectContent(item: item, library: store, width: size.width, height: size.height)
+                    .scaleEffect(item.scale)
+                    .rotationEffect(.degrees(item.angle))
+                    .shadow(color: .black.opacity(0.13), radius: 3, y: 2)
+                    .opacity(item.opacity)
+                    .scaleEffect(x: item.flipped ? -1 : 1, y: 1)
+                    .position(x: size.width * item.x, y: size.height * item.y)
+            }
+            let storedSize = store.inkCanvasSize(page: page.id) ?? size
+            let drawing = store.drawing(for: page.id)
+            if !drawing.bounds.isNull {
+                Image(uiImage: drawing.image(from: CGRect(origin: .zero, size: storedSize), scale: 2))
+                    .resizable().frame(width: size.width, height: size.height)
+            }
         }
-
-        // PDF: рукописный слой поверх наклеек, как на экране iPad.
-        let drawing = store.drawing(for: page.id)
-        if !drawing.bounds.isNull {
-            let fitted = drawing.image(from: CGRect(origin: .zero,
-                size: CGSize(width: bounds.width, height: bounds.height)), scale: 1.0)
-            fitted.draw(in: bounds)
-        }
-
-        let footer: [NSAttributedString.Key: Any] = [
-            .font: UIFont(name: "Georgia", size: 13) ?? UIFont.systemFont(ofSize: 13),
-            .foregroundColor: UIColor(red: 0.58, green: 0.52, blue: 0.55, alpha: 0.8)
-        ]
-        if page.backgroundFile == nil {
-            ("quiet pages · \(pageNumber)" as NSString).draw(at: CGPoint(x: 40, y: bounds.height - 34), withAttributes: footer)
-        }
+        .frame(width: size.width, height: size.height).clipped()
     }
 }

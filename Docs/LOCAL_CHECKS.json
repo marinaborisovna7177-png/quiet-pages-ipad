@@ -1,0 +1,11 @@
+{
+  "swift_files_parsed": 14,
+  "asset_files_decoded": 4302,
+  "sticker_count": 2143,
+  "paper_themes": 16,
+  "paper_rulings": 64,
+  "template_theme_combinations": 240,
+  "xcode_build": "NOT RUN",
+  "ipad_tests": "NOT RUN",
+  "syntax_check": "tree-sitter only; not Swift typechecking"
+}

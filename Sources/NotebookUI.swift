@@ -500,8 +500,8 @@ struct StickerEntry: Identifiable {
 }
 
 enum StickerCatalog {
-    static let categories = ["Все", "Рамки", "Цветы", "Ленты", "Записки", "Уют", "Винтаж"] + MegaStickerCatalog.categories + StudioCompositionCatalog.categories
-    static let all: [StickerEntry] = [
+    static let categories = Studio6StickerCatalog.categories + ["Все", "Рамки", "Цветы", "Ленты", "Записки", "Уют", "Винтаж"] + MegaStickerCatalog.categories + StudioCompositionCatalog.categories
+    static let all: [StickerEntry] = Studio6StickerCatalog.all + [
         StickerEntry(id: "CozyKitten", title: "Котёнок", category: "Уют"),
         StickerEntry(id: "StrawberryCake", title: "Клубничный торт", category: "Уют"),
         StickerEntry(id: "MatchaCup", title: "Матча", category: "Уют"),
@@ -677,4 +677,27 @@ enum StudioCompositionCatalog {
                                 title: "\(title) · \(position)", category: title)
         }
     }
+}
+
+
+enum Studio6StickerCatalog {
+    static let categories = ["Винтажные закладки", "Акварельные растения", "Банты и кружево", "Декоративный скотч", "Пейзажные бордюры", "Сказочные объекты", "Книги, письма и ключи", "Животные", "Часы, фонари и свечи", "Чай и десерты", "Сезонные украшения", "Рамки и полароиды", "Текстурная бумага", "Готовые композиции"]
+    static let all: [StickerEntry] = [
+        StickerEntry(id: "Studio6_01", title: "Закладка лесная", category: "Винтажные закладки"),
+        StickerEntry(id: "Studio6_02", title: "Пионы акварельные", category: "Акварельные растения"),
+        StickerEntry(id: "Studio6_03", title: "Бант с кружевом", category: "Банты и кружево"),
+        StickerEntry(id: "Studio6_04", title: "Ботанический скотч", category: "Декоративный скотч"),
+        StickerEntry(id: "Studio6_05", title: "Горный пейзаж", category: "Пейзажные бордюры"),
+        StickerEntry(id: "Studio6_06", title: "Сказочная лестница", category: "Сказочные объекты"),
+        StickerEntry(id: "Studio6_07", title: "Волшебная книга и ключ", category: "Книги, письма и ключи"),
+        StickerEntry(id: "Studio6_08", title: "Спящий котёнок", category: "Животные"),
+        StickerEntry(id: "Studio6_09", title: "Старинный фонарь", category: "Часы, фонари и свечи"),
+        StickerEntry(id: "Studio6_10", title: "Чай с печеньем", category: "Чай и десерты"),
+        StickerEntry(id: "Studio6_11", title: "Осенние украшения", category: "Сезонные украшения"),
+        StickerEntry(id: "Studio6_12", title: "Цветочный полароид", category: "Рамки и полароиды"),
+        StickerEntry(id: "Studio6_13", title: "Старинная бумага", category: "Текстурная бумага"),
+        StickerEntry(id: "Studio6_14", title: "Книжная композиция", category: "Готовые композиции"),
+        StickerEntry(id: "Studio6_15", title: "Зимняя веточка", category: "Сезонные украшения"),
+        StickerEntry(id: "Studio6_16", title: "Луна и звёзды", category: "Сказочные объекты")
+    ]
 }

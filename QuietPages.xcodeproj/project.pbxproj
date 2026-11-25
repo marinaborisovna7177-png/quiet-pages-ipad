@@ -5,6 +5,10 @@
 	objectVersion = 56;
 	objects = {
 /* Begin PBXBuildFile section */
+606300000000000000000003 = {isa = PBXBuildFile; fileRef = 606300000000000000000001; };
+606200000000000000000001 = {isa = PBXBuildFile; fileRef = 606200000000000000000002; };
+606000000000000000000002 = {isa = PBXBuildFile; fileRef = 606100000000000000000002; };
+606000000000000000000001 = {isa = PBXBuildFile; fileRef = 606100000000000000000001; };
 		5DAFA030C1442001F2026112 /* PhotoStudio.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5DAFA030C1442002F2026112 /* PhotoStudio.swift */; };
 		ED21A9A8C653732F7502B5F4 /* QuietPagesApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = BF44E0DF03D9BE7A474131D8 /* QuietPagesApp.swift */; };
 		673F4805F285D9158FF6CEAF /* NotebookData.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1DE8BC9F210E0ACA1DA7FE9F /* NotebookData.swift */; };
@@ -19,6 +23,11 @@
 		19AAB2BBBBBBBBBBBBBBBBBB /* CoverCatalog.swift in Sources */ = {isa = PBXBuildFile; fileRef = 19AAB2AAAAAAAAAAAAAAAAAA /* CoverCatalog.swift */; };
 /* End PBXBuildFile section */
 /* Begin PBXFileReference section */
+606300000000000000000001 = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Tests/Studio6Tests.swift; sourceTree = SOURCE_ROOT; };
+606300000000000000000002 = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; path = QuietPagesTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
+606200000000000000000002 = {isa = PBXFileReference; lastKnownFileType = folder; path = StudioAssets; sourceTree = "<group>"; };
+606100000000000000000002 = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StudioTemplates.swift; sourceTree = "<group>"; };
+606100000000000000000001 = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StudioAssets.swift; sourceTree = "<group>"; };
 		5DAFA030C1442002F2026112 /* PhotoStudio.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PhotoStudio.swift; sourceTree = "<group>"; };
 		BF44E0DF03D9BE7A474131D8 /* QuietPagesApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = QuietPagesApp.swift; sourceTree = "<group>"; };
 		1DE8BC9F210E0ACA1DA7FE9F /* NotebookData.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NotebookData.swift; sourceTree = "<group>"; };
@@ -34,11 +43,20 @@
 		19AAB2AAAAAAAAAAAAAAAAAA /* CoverCatalog.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CoverCatalog.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 /* Begin PBXFrameworksBuildPhase section */
+606300000000000000000005 = {isa = PBXFrameworksBuildPhase; buildActionMask = 2147483647; files = (); runOnlyForDeploymentPostprocessing = 0; };
 		5DFFFCA186F0FC32D147A428 = {isa = PBXFrameworksBuildPhase; buildActionMask = 2147483647; files = (); runOnlyForDeploymentPostprocessing = 0; };
 /* End PBXFrameworksBuildPhase section */
+/* Begin PBXContainerItemProxy section */
+60630000000000000000000C = {isa = PBXContainerItemProxy; containerPortal = EE5A7BC30DFB9078E494187A; proxyType = 1; remoteGlobalIDString = C06B948CBB829AEC9CFC0DA1; remoteInfo = QuietPages; };
+/* End PBXContainerItemProxy section */
+/* Begin PBXTargetDependency section */
+60630000000000000000000B = {isa = PBXTargetDependency; target = C06B948CBB829AEC9CFC0DA1; targetProxy = 60630000000000000000000C; };
+/* End PBXTargetDependency section */
 /* Begin PBXGroup section */
-		7E3C32BF75F587CD7E046B48 = {isa = PBXGroup; children = (1BD1E6ADD04558A76E080D70 /* Sources */, D7B93AA9D88B24D61ED9EB08 /* Resources */, 524D516C58BF5423637110DD /* Products */); sourceTree = "<group>"; };
+		7E3C32BF75F587CD7E046B48 = {isa = PBXGroup; children = (606300000000000000000001,1BD1E6ADD04558A76E080D70 /* Sources */, D7B93AA9D88B24D61ED9EB08 /* Resources */, 524D516C58BF5423637110DD /* Products */); sourceTree = "<group>"; };
 		1BD1E6ADD04558A76E080D70 /* Sources */ = {isa = PBXGroup; children = (
+606100000000000000000002,
+606100000000000000000001,
 			5DAFA030C1442002F2026112 /* PhotoStudio.swift */,
 			BF44E0DF03D9BE7A474131D8 /* QuietPagesApp.swift */,
 			1DE8BC9F210E0ACA1DA7FE9F /* NotebookData.swift */,
@@ -51,10 +69,11 @@
 			E8ECF712AE0CA81D753ED4E8 /* InkCanvas.swift */,
 			A8A240832FB2DE4CB39B5557 /* Export.swift */,
 		); path = Sources; sourceTree = "<group>"; };
-		D7B93AA9D88B24D61ED9EB08 /* Resources */ = {isa = PBXGroup; children = (46273D9B7E2D6AA197DA74C8 /* Assets.xcassets */); path = Resources; sourceTree = "<group>"; };
-		524D516C58BF5423637110DD /* Products */ = {isa = PBXGroup; children = (BC6414B1B2BAB8C9DC15773F /* QuietPages.app */); name = Products; sourceTree = "<group>"; };
+		D7B93AA9D88B24D61ED9EB08 /* Resources */ = {isa = PBXGroup; children = (606200000000000000000002,46273D9B7E2D6AA197DA74C8 /* Assets.xcassets */); path = Resources; sourceTree = "<group>"; };
+		524D516C58BF5423637110DD /* Products */ = {isa = PBXGroup; children = (606300000000000000000002,BC6414B1B2BAB8C9DC15773F /* QuietPages.app */); name = Products; sourceTree = "<group>"; };
 /* End PBXGroup section */
 /* Begin PBXNativeTarget section */
+606300000000000000000007 = {isa = PBXNativeTarget; buildConfigurationList = 606300000000000000000008; buildPhases = (606300000000000000000004,606300000000000000000005,606300000000000000000006); buildRules = (); dependencies = (60630000000000000000000B); name = QuietPagesTests; productName = QuietPagesTests; productReference = 606300000000000000000002; productType = "com.apple.product-type.bundle.unit-test"; };
 		C06B948CBB829AEC9CFC0DA1 /* QuietPages */ = {
 			isa = PBXNativeTarget;
 			buildConfigurationList = FAFB848D9FFA92A1920DFC7C;
@@ -80,14 +99,18 @@
 			productRefGroup = 524D516C58BF5423637110DD;
 			projectDirPath = "";
 			projectRoot = "";
-			targets = (C06B948CBB829AEC9CFC0DA1 /* QuietPages */);
+			targets = (606300000000000000000007,C06B948CBB829AEC9CFC0DA1 /* QuietPages */);
 		};
 /* End PBXProject section */
 /* Begin PBXResourcesBuildPhase section */
-		1EF704DED25E7E80EE5B0A22 = {isa = PBXResourcesBuildPhase; buildActionMask = 2147483647; files = (8EFD5743999F168D176AB696 /* Assets.xcassets in Resources */); runOnlyForDeploymentPostprocessing = 0; };
+606300000000000000000006 = {isa = PBXResourcesBuildPhase; buildActionMask = 2147483647; files = (); runOnlyForDeploymentPostprocessing = 0; };
+		1EF704DED25E7E80EE5B0A22 = {isa = PBXResourcesBuildPhase; buildActionMask = 2147483647; files = (606200000000000000000001, 8EFD5743999F168D176AB696 /* Assets.xcassets in Resources */); runOnlyForDeploymentPostprocessing = 0; };
 /* End PBXResourcesBuildPhase section */
 /* Begin PBXSourcesBuildPhase section */
+606300000000000000000004 = {isa = PBXSourcesBuildPhase; buildActionMask = 2147483647; files = (606300000000000000000003); runOnlyForDeploymentPostprocessing = 0; };
 		06699AA0629BF43F3BAF9EEB = {isa = PBXSourcesBuildPhase; buildActionMask = 2147483647; files = (
+606000000000000000000002,
+606000000000000000000001,
 			5DAFA030C1442001F2026112 /* PhotoStudio.swift in Sources */,
 			ED21A9A8C653732F7502B5F4 /* QuietPagesApp.swift in Sources */,
 			673F4805F285D9158FF6CEAF /* NotebookData.swift in Sources */,
@@ -102,12 +125,15 @@
 		); runOnlyForDeploymentPostprocessing = 0; };
 /* End PBXSourcesBuildPhase section */
 /* Begin XCBuildConfiguration section */
+60630000000000000000000A = {isa = XCBuildConfiguration; buildSettings = { BUNDLE_LOADER = "$(TEST_HOST)"; TEST_HOST = "$(BUILT_PRODUCTS_DIR)/QuietPages.app/QuietPages"; GENERATE_INFOPLIST_FILE = YES; IPHONEOS_DEPLOYMENT_TARGET = 17.0; PRODUCT_BUNDLE_IDENTIFIER = com.salipaper.quietpages.tests; PRODUCT_NAME = "$(TARGET_NAME)"; SWIFT_VERSION = 5.0; TARGETED_DEVICE_FAMILY = 2; CODE_SIGNING_ALLOWED = NO; }; name = Release; };
+606300000000000000000009 = {isa = XCBuildConfiguration; buildSettings = { BUNDLE_LOADER = "$(TEST_HOST)"; TEST_HOST = "$(BUILT_PRODUCTS_DIR)/QuietPages.app/QuietPages"; GENERATE_INFOPLIST_FILE = YES; IPHONEOS_DEPLOYMENT_TARGET = 17.0; PRODUCT_BUNDLE_IDENTIFIER = com.salipaper.quietpages.tests; PRODUCT_NAME = "$(TARGET_NAME)"; SWIFT_VERSION = 5.0; TARGETED_DEVICE_FAMILY = 2; CODE_SIGNING_ALLOWED = NO; }; name = Debug; };
 		22FA92A9463469431A946998 /* Debug */ = {isa = XCBuildConfiguration; buildSettings = { ALWAYS_SEARCH_USER_PATHS = NO; CLANG_ENABLE_MODULES = YES; CLANG_ENABLE_OBJC_ARC = YES; CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER = YES; DEBUG_INFORMATION_FORMAT = dwarf; ENABLE_TESTABILITY = YES; GCC_OPTIMIZATION_LEVEL = 0; SDKROOT = iphoneos; SWIFT_ACTIVE_COMPILATION_CONDITIONS = DEBUG; SWIFT_OPTIMIZATION_LEVEL = "-Onone"; }; name = Debug; };
 		ABF4CEC36D7A4A60FC612056 /* Release */ = {isa = XCBuildConfiguration; buildSettings = { ALWAYS_SEARCH_USER_PATHS = NO; CLANG_ENABLE_MODULES = YES; CLANG_ENABLE_OBJC_ARC = YES; CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER = YES; DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym"; SDKROOT = iphoneos; SWIFT_COMPILATION_MODE = wholemodule; SWIFT_OPTIMIZATION_LEVEL = "-O"; }; name = Release; };
-		60BC0B5BE69D934CB94F4BEA /* Debug */ = {isa = XCBuildConfiguration; buildSettings = { ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon; CODE_SIGN_STYLE = Automatic; CURRENT_PROJECT_VERSION = 3; DEVELOPMENT_ASSET_PATHS = ""; GENERATE_INFOPLIST_FILE = NO; INFOPLIST_FILE = Resources/Info.plist; IPHONEOS_DEPLOYMENT_TARGET = 17.0; MARKETING_VERSION = 7.0; PRODUCT_BUNDLE_IDENTIFIER = com.salipaper.quietpages; PRODUCT_NAME = "$(TARGET_NAME)"; SWIFT_VERSION = 5.0; SUPPORTED_PLATFORMS = "iphoneos iphonesimulator"; TARGETED_DEVICE_FAMILY = 2; }; name = Debug; };
-		86EC7712C84257EED786EE2D /* Release */ = {isa = XCBuildConfiguration; buildSettings = { ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon; CODE_SIGN_STYLE = Automatic; CURRENT_PROJECT_VERSION = 3; DEVELOPMENT_ASSET_PATHS = ""; GENERATE_INFOPLIST_FILE = NO; INFOPLIST_FILE = Resources/Info.plist; IPHONEOS_DEPLOYMENT_TARGET = 17.0; MARKETING_VERSION = 7.0; PRODUCT_BUNDLE_IDENTIFIER = com.salipaper.quietpages; PRODUCT_NAME = "$(TARGET_NAME)"; SWIFT_VERSION = 5.0; SUPPORTED_PLATFORMS = "iphoneos iphonesimulator"; TARGETED_DEVICE_FAMILY = 2; }; name = Release; };
+		60BC0B5BE69D934CB94F4BEA /* Debug */ = {isa = XCBuildConfiguration; buildSettings = { ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon; CODE_SIGN_STYLE = Automatic; CURRENT_PROJECT_VERSION = 60; DEVELOPMENT_ASSET_PATHS = ""; GENERATE_INFOPLIST_FILE = NO; INFOPLIST_FILE = Resources/Info.plist; IPHONEOS_DEPLOYMENT_TARGET = 17.0; MARKETING_VERSION = 6.0; PRODUCT_BUNDLE_IDENTIFIER = com.salipaper.quietpages; PRODUCT_NAME = "$(TARGET_NAME)"; SWIFT_VERSION = 5.0; SUPPORTED_PLATFORMS = "iphoneos iphonesimulator"; TARGETED_DEVICE_FAMILY = 2; }; name = Debug; };
+		86EC7712C84257EED786EE2D /* Release */ = {isa = XCBuildConfiguration; buildSettings = { ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon; CODE_SIGN_STYLE = Automatic; CURRENT_PROJECT_VERSION = 60; DEVELOPMENT_ASSET_PATHS = ""; GENERATE_INFOPLIST_FILE = NO; INFOPLIST_FILE = Resources/Info.plist; IPHONEOS_DEPLOYMENT_TARGET = 17.0; MARKETING_VERSION = 6.0; PRODUCT_BUNDLE_IDENTIFIER = com.salipaper.quietpages; PRODUCT_NAME = "$(TARGET_NAME)"; SWIFT_VERSION = 5.0; SUPPORTED_PLATFORMS = "iphoneos iphonesimulator"; TARGETED_DEVICE_FAMILY = 2; }; name = Release; };
 /* End XCBuildConfiguration section */
 /* Begin XCConfigurationList section */
+606300000000000000000008 = {isa = XCConfigurationList; buildConfigurations = (606300000000000000000009,60630000000000000000000A); defaultConfigurationIsVisible = 0; defaultConfigurationName = Release; };
 		511CCCC4BCDB559CA81393C3 = {isa = XCConfigurationList; buildConfigurations = (22FA92A9463469431A946998, ABF4CEC36D7A4A60FC612056); defaultConfigurationIsVisible = 0; defaultConfigurationName = Release; };
 		FAFB848D9FFA92A1920DFC7C = {isa = XCConfigurationList; buildConfigurations = (60BC0B5BE69D934CB94F4BEA, 86EC7712C84257EED786EE2D); defaultConfigurationIsVisible = 0; defaultConfigurationName = Release; };
 /* End XCConfigurationList section */

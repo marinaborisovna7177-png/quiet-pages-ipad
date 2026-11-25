@@ -46,11 +46,14 @@ struct NotebookEditor: View {
     @Environment(\.dismiss) private var dismiss
     @State private var currentPage = 0
     @State private var focusMode = false
+    @State private var pageZoom: CGFloat = 1
     @State private var showFilmstrip = true
     @State private var ink: InkChoice = .pen
     @State private var penColor: Color = AppPalette.midnight
     @State private var strokeWidth: Double = 3
     @State private var strokeOpacity: Double = 1
+    @AppStorage("qpPencilOnly") private var pencilOnly = false
+    @AppStorage("qpConstantInkWidth") private var constantWidth = true
     @State private var editingTextItem: PageItem?
     @State private var editingPhotoItem: PageItem?
     @State private var stickerDraft: WorkshopPhoto?
@@ -104,6 +107,7 @@ struct NotebookEditor: View {
                 ContentUnavailableView("Блокнот не найден", systemImage: "book.closed")
             }
         }
+        .onChange(of: currentPage) { _, _ in pageZoom = 1 }
         .navigationBarBackButtonHidden(true)
         .toolbar(.hidden, for: .navigationBar)
         .sheet(item: Binding(
@@ -323,11 +327,14 @@ struct NotebookEditor: View {
                                 }
                                 .disabled(currentPage == 0).opacity(currentPage == 0 ? 0.16 : 1)
                                 Spacer(minLength: 0)
+                                StudioPageViewport(pageSize: CGSize(width: width, height: height), zoom: $pageZoom, allowsZoom: !arrangingDecor) {
                                 JournalPageCanvas(page: page, width: width, height: height,
                                                   library: library, bookID: bookID,
                                                   ink: ink, penColor: penColor,
                                                   strokeWidth: strokeWidth,
                                                   strokeOpacity: strokeOpacity,
+                                                  pencilOnly: pencilOnly,
+                                                  constantWidth: constantWidth,
                                                   pageNumber: currentPage + 1,
                                                   arrangingDecor: arrangingDecor,
                                                   decorativeSticker: decorativeSticker,
@@ -343,7 +350,9 @@ struct NotebookEditor: View {
                                     .overlay(alignment: .leading) {
                                         Rectangle().fill(.black.opacity(0.026)).frame(width: 7).allowsHitTesting(false)
                                     }
-                                    .transition(.opacity.combined(with: .scale(scale: 0.992)))
+                                    .transition(.opacity)
+                                }
+                                .frame(maxWidth: .infinity, maxHeight: .infinity)
                                 Spacer(minLength: 0)
                                 Button { turnPage(1) } label: {
                                     Image(systemName: "chevron.right")
@@ -359,6 +368,15 @@ struct NotebookEditor: View {
                             .frame(maxWidth: .infinity, maxHeight: .infinity)
                         }
                         if !focusMode {
+                            HStack(spacing: 14) {
+                                Text("Страница \(currentPage + 1) из \(book.pages.count)")
+                                Spacer()
+                                Button("−") { pageZoom = max(1, pageZoom - 0.25) }
+                                Button("\(Int(pageZoom * 100))%") { pageZoom = 1 }
+                                Button("+") { pageZoom = min(3, pageZoom + 0.25) }
+                                Text("Масштаб и сдвиг — двумя пальцами").foregroundStyle(AppPalette.muted)
+                            }
+                            .font(.system(size: 11)).padding(.horizontal, 25).padding(.vertical, 6)
                             if showFilmstrip { miniaturePages(book) }
                             toolBar(book)
                         }
@@ -456,8 +474,8 @@ struct NotebookEditor: View {
             library.addItem(book: bookID, page: page.id,
                 item: PageItem(kind: .sticker, value: stickerName, x: 0.5, y: 0.5))
         }
-        // Gallery intentionally stays open for adding several decorations.
-        // PencilKit still receives taps on every free part of the page.
+        panel = nil
+        if ink == .decorative { ink = .pen }
     }
 
     private var floatingQuickPanel: some View {
@@ -654,6 +672,7 @@ struct NotebookEditor: View {
                 Button("Удалить страницу", systemImage: "trash", role: .destructive) { showDeletePage = true }
                     .disabled(book.pages.count == 1)
                 Button("Экспортировать в PDF", systemImage: "square.and.arrow.up") { exportPDF() }
+                Button("Сохранить страницу PNG", systemImage: "photo") { exportPNG() }
                 Button("Резервная копия блокнота", systemImage: "externaldrive.badge.timemachine") { exportBackup() }
             } label: {
                 Image(systemName: "ellipsis")
@@ -688,6 +707,14 @@ struct NotebookEditor: View {
                     ToolChip(title: "↔ Двигать наклейки", symbol: "hand.draw", selected: arrangingDecor)
                 }.buttonStyle(.plain)
                 Rectangle().fill(Color(hex: 0xD8D1CA)).frame(width: 1, height: 23)
+                Menu {
+                    Toggle("Только Apple Pencil (защита от ладони)", isOn: $pencilOnly)
+                    Toggle("Постоянная толщина ручки и пера", isOn: $constantWidth)
+                    Text("Для пальца и обычного стилуса выключите «Только Apple Pencil».")
+                } label: {
+                    ToolChip(title: pencilOnly ? "Apple Pencil" : "Палец / стилус",
+                             symbol: "hand.raised", selected: pencilOnly)
+                }
                 Text("РИСОВАНИЕ")
                     .font(.system(size: 9, weight: .semibold)).tracking(1.6)
                     .foregroundStyle(AppPalette.muted).padding(.trailing, 4)
@@ -773,9 +800,14 @@ struct NotebookEditor: View {
     }
 
     private func exportPDF() {
-        guard let book = library.notebook(bookID),
-              let url = try? PDFNotebookExporter.export(book: book, store: library) else { return }
-        exportItem = SharedDocument(url: url)
+        guard let book = library.notebook(bookID) else { return }
+        do { exportItem = SharedDocument(url: try PDFNotebookExporter.export(book: book, store: library)) }
+        catch { importError = error.localizedDescription }
+    }
+    private func exportPNG() {
+        guard let book = library.notebook(bookID), let page = safePage(book) else { return }
+        do { exportItem = SharedDocument(url: try PDFNotebookExporter.exportPNG(page: page, store: library)) }
+        catch { importError = error.localizedDescription }
     }
 
     private func exportBackup() {
@@ -831,6 +863,8 @@ struct JournalPageCanvas: View {
     let penColor: Color
     let strokeWidth: Double
     let strokeOpacity: Double
+    let pencilOnly: Bool
+    let constantWidth: Bool
     let pageNumber: Int
     let arrangingDecor: Bool
     let decorativeSticker: String
@@ -844,6 +878,7 @@ struct JournalPageCanvas: View {
         ZStack(alignment: .topLeading) {
             PaperBackground(style: page.paper, customHex: page.customPaperHex,
                             decorationOpacity: page.decorationOpacity ?? 1)
+                .allowsHitTesting(false)
                 .overlay {
                     Image("PaperGrain").resizable().scaledToFill().opacity(0.48)
                         .frame(width: width, height: height).clipped().allowsHitTesting(false)
@@ -870,7 +905,10 @@ struct JournalPageCanvas: View {
                       color: UIColor(penColor).withAlphaComponent(CGFloat(strokeOpacity)),
                       strokeWidth: CGFloat(strokeWidth),
                       isEnabled: !arrangingDecor && ink != .decorative,
-                      revision: library.inkRevision)
+                      revision: library.inkRevision,
+                      pencilOnly: pencilOnly,
+                      constantWidth: constantWidth,
+                      canvasSize: CGSize(width: width, height: height))
                 .allowsHitTesting(!arrangingDecor && ink != .decorative)
             if ink == .decorative && !arrangingDecor {
                 Color.clear.contentShape(Rectangle())
@@ -892,7 +930,7 @@ struct JournalPageCanvas: View {
             }
             VStack {
                 HStack {
-                    if page.backgroundFile == nil {
+                    if page.backgroundFile == nil && !page.paper.hasPrefix("Studio6_") {
                     VStack(alignment: .leading, spacing: 5) {
                         Text("THE JOURNAL")
                             .font(.system(size: 10, weight: .medium)).tracking(2.6)
@@ -901,14 +939,14 @@ struct JournalPageCanvas: View {
                     .foregroundStyle(AppPalette.rose.opacity(0.63))
                     }
                     Spacer()
-                    if page.backgroundFile == nil {
+                    if page.backgroundFile == nil && !page.paper.hasPrefix("Studio6_") {
                     Text("PRIVATE NOTES").font(.system(size: 8, weight: .medium))
                         .tracking(2).foregroundStyle(AppPalette.muted.opacity(0.65))
                     }
                 }
                 Spacer()
                 HStack {
-                    if page.backgroundFile == nil { Text("little moments, beautifully kept")
+                    if page.backgroundFile == nil && !page.paper.hasPrefix("Studio6_") { Text("little moments, beautifully kept")
                         .font(.system(size: 9, design: .serif)).italic() }
                     Spacer()
                     Text(String(format: "%02d", pageNumber))
@@ -950,7 +988,7 @@ struct DraggablePageItem: View {
             .contentShape(Rectangle())
             .gesture(
                 DragGesture(minimumDistance: 2)
-                    .onChanged { drag = $0.translation }
+                    .onChanged { if !item.locked { drag = $0.translation } }
                     .onEnded { value in
                         if !item.locked {
                             library.moveItem(book: bookID, page: pageID, item: item.id,
@@ -962,7 +1000,7 @@ struct DraggablePageItem: View {
             )
             .simultaneousGesture(
                 MagnificationGesture()
-                    .onChanged { pinch = $0 }
+                    .onChanged { if !item.locked { pinch = $0 } }
                     .onEnded { value in
                         if !item.locked {
                             library.resizeItem(book: bookID, page: pageID, item: item.id,
@@ -973,7 +1011,7 @@ struct DraggablePageItem: View {
             )
             .simultaneousGesture(
                 RotationGesture()
-                    .onChanged { twist = $0 }
+                    .onChanged { if !item.locked { twist = $0 } }
                     .onEnded { value in
                         if !item.locked {
                             library.resizeItem(book: bookID, page: pageID, item: item.id,
@@ -1036,11 +1074,20 @@ struct DraggablePageItem: View {
             }
     }
 
-    @ViewBuilder
     private var itemContent: some View {
+        PageObjectContent(item: item, library: library, width: width, height: height)
+    }
+}
+
+struct PageObjectContent: View {
+    let item: PageItem
+    let library: NotebookLibrary
+    let width: CGFloat
+    let height: CGFloat
+    @ViewBuilder var body: some View {
         switch item.kind {
         case .sticker:
-            Image("Sticker_\(item.value)")
+            Image(uiImage: StudioImageStore.full(item.value) ?? UIImage())
                 .resizable().scaledToFit()
                 .frame(width: width * (item.value.hasPrefix("Frame") ? 0.92 : 0.22),
                        height: item.value.hasPrefix("Frame") ? height * 0.94 : width * 0.22)
@@ -1088,6 +1135,14 @@ struct PaperBackground: View {
     var body: some View {
         Canvas { ctx, size in
             let preset = PaperCatalog.find(style)
+            if let art = Studio6Catalog.art(for: style) {
+                ctx.fill(Path(CGRect(origin: .zero, size: size)), with: .color(Color(hex: 0xFFF9EF)))
+                ctx.opacity = decorationOpacity
+                ctx.draw(Image(art), in: CGRect(origin: .zero, size: size))
+                ctx.opacity = 1
+                StudioTemplateRenderer.draw(preset?.pattern.replacingOccurrences(of: "s6:", with: "") ?? "blank", context: &ctx, size: size)
+                return
+            }
             let bg = customHex ?? preset?.background ?? 0xFFFDF7
             let accent = preset?.accent ?? 0xBFB6AF
             let ink = Color(hex: accent)
@@ -1323,6 +1378,9 @@ struct StickerPalette: View {
     let add: (String) -> Void
     @State private var category = "Все"
     @State private var search = ""
+    @State private var batch = 0
+    @State private var preview: StickerEntry?
+    private let batchSize = 48
     @AppStorage("qpFavoriteStickers") private var favoriteIDs = ""
     @AppStorage("qpRecentStickers") private var recentIDs = ""
     private var favoriteSet: Set<String> { Set(favoriteIDs.split(separator: ",").map(String.init)) }
@@ -1339,12 +1397,20 @@ struct StickerPalette: View {
     }
     private let columns = [GridItem(.adaptive(minimum: 104, maximum: 150), spacing: 12)]
     private var filtered: [StickerEntry] {
-        StickerCatalog.all.filter { entry in
-            (category == "Все" || entry.category == category ||
-             (category == "Избранное" && favoriteSet.contains(entry.id)) ||
-             (category == "Недавние" && recentSet.contains(entry.id))) &&
-            (search.isEmpty || entry.title.localizedCaseInsensitiveContains(search) || entry.category.localizedCaseInsensitiveContains(search))
+        let favorites = favoriteSet
+        let recent = recentIDs.split(separator: ",").map(String.init)
+        let query = search.trimmingCharacters(in: .whitespacesAndNewlines)
+        let entries = category == "Недавние"
+            ? recent.compactMap { id in StickerCatalog.all.first { $0.id == id } }
+            : StickerCatalog.all
+        return entries.filter { entry in
+            (category == "Все" || category == "Недавние" || entry.category == category ||
+             (category == "Избранное" && favorites.contains(entry.id))) &&
+            (query.isEmpty || entry.title.localizedCaseInsensitiveContains(query) || entry.category.localizedCaseInsensitiveContains(query))
         }
+    }
+    private var visibleEntries: [StickerEntry] {
+        Array(filtered.dropFirst(batch * batchSize).prefix(batchSize))
     }
     var body: some View {
         NavigationStack {
@@ -1360,7 +1426,7 @@ struct StickerPalette: View {
                         .textFieldStyle(.roundedBorder)
                     ScrollView(.horizontal, showsIndicators: false) {
                         HStack(spacing: 8) {
-                            ForEach(["Все", "Избранное", "Недавние"] + StickerCatalog.categories.filter { $0 != "Все" }, id: \.self) { section in
+                            ForEach(["Все", "Избранное", "Недавние"] + StickerCatalog.categories.enumerated().filter { index, value in value != "Все" && !StickerCatalog.categories.prefix(index).contains(value) }.map(\.element), id: \.self) { section in
                                 Button { category = section } label: {
                                     Text(section)
                                         .font(.system(size: 13, weight: .medium))
@@ -1375,23 +1441,20 @@ struct StickerPalette: View {
                         ContentUnavailableView("Ничего не найдено", systemImage: "magnifyingglass")
                     } else {
                         LazyVGrid(columns: columns, spacing: 12) {
-                            ForEach(filtered) { sticker in
+                            ForEach(visibleEntries) { sticker in
                                 VStack(spacing: 6) {
                                     Button { insertSticker(sticker.id) } label: {
                                         VStack(spacing: 6) {
                                             Group {
                                                 if let components = StudioCompositionCatalog.components(for: sticker.id) {
                                                     ZStack {
-                                                        Image("Sticker_\(components.0)")
-                                                            .resizable().scaledToFit()
+                                                        StickerThumbnail(id: components.0)
                                                             .frame(width: 106, height: 100).offset(x: -10, y: -7)
-                                                        Image("Sticker_\(components.1)")
-                                                            .resizable().scaledToFit()
+                                                        StickerThumbnail(id: components.1)
                                                             .frame(width: 74, height: 74).offset(x: 19, y: 14)
                                                     }
                                                 } else {
-                                                    Image("Sticker_\(sticker.id)")
-                                                        .resizable().scaledToFit()
+                                                    StickerThumbnail(id: sticker.id)
                                                 }
                                             }
                                             .frame(height: 100)
@@ -1404,6 +1467,8 @@ struct StickerPalette: View {
                                                 .frame(height: 30)
                                         }.frame(maxWidth: .infinity)
                                     }.buttonStyle(.plain)
+                                    Button("Рассмотреть") { preview = sticker }
+                                        .font(.system(size: 11))
                                     Button { toggleFavorite(sticker.id) } label: {
                                         Label(favoriteSet.contains(sticker.id) ? "В избранном" : "В избранное",
                                               systemImage: favoriteSet.contains(sticker.id) ? "heart.fill" : "heart")
@@ -1418,6 +1483,14 @@ struct StickerPalette: View {
                             }
                         }
                     }
+                    HStack {
+                        Button("Назад") { batch = max(0, batch - 1) }.disabled(batch == 0)
+                        Spacer()
+                        Text("\(batch + 1) / \(max(1, (filtered.count + batchSize - 1) / batchSize))")
+                        Spacer()
+                        Button("Далее") { batch += 1 }
+                            .disabled((batch + 1) * batchSize >= filtered.count)
+                    }.buttonStyle(.bordered)
                     if category == "Рамки" || category == "Все" {
                         Text("Нажми на наклейку дважды, чтобы набрать текст. Удерживай для поворота, копирования и слоёв. Двигай пальцем, крути двумя пальцами.")
                             .font(.system(size: 12)).foregroundStyle(AppPalette.muted)
@@ -1427,6 +1500,11 @@ struct StickerPalette: View {
             .background(AppPalette.parchment)
             .navigationTitle("Украшения")
             .navigationBarTitleDisplayMode(.inline)
+        }
+        .onChange(of: category) { _, _ in batch = 0 }
+        .onChange(of: search) { _, _ in batch = 0 }
+        .sheet(item: $preview) { entry in
+            StickerPreview(entry: entry) { insertSticker(entry.id) }
         }
         .presentationDetents([.medium, .large])
     }
@@ -1478,7 +1556,7 @@ struct PaperPalette: View {
                         .textFieldStyle(.roundedBorder)
                     ScrollView(.horizontal, showsIndicators: false) {
                         HStack(spacing: 9) {
-                            ForEach(PaperCatalog.categories, id: \.self) { cat in
+                            ForEach(PaperCatalog.categories.enumerated().filter { index, value in !PaperCatalog.categories.prefix(index).contains(value) }.map(\.element), id: \.self) { cat in
                                 Button { category = cat } label: {
                                     Text(cat).font(.system(size: 12, weight: .medium))
                                         .padding(.horizontal, 13).padding(.vertical, 10)
@@ -1702,7 +1780,7 @@ struct MyPNGGallery: View {
                     } else {
                         LazyVGrid(columns: columns, spacing: 12) {
                             ForEach(files, id: \.self) { filename in
-                                if let image = library.photo(named: filename) {
+                                if let image = library.photo(named: filename, pixels: 192) {
                                     Button { add(filename) } label: {
                                         Image(uiImage: image).resizable().scaledToFit()
                                             .frame(height: 110).frame(maxWidth: .infinity)
